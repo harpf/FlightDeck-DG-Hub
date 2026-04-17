@@ -1,0 +1,45 @@
+services:
+  app:
+    build: .
+    container_name: clubcore_app
+    env_file:
+      - .env
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: mariadb:11.4
+    container_name: clubcore_db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: clubcore
+      MARIADB_USER: clubcore
+      MARIADB_PASSWORD: clubcore
+      MARIADB_ROOT_PASSWORD: rootsecret
+    volumes:
+      - db_data:/var/lib/mysql
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: clubcore_nginx
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certbot/www:/var/www/certbot:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: clubcore_certbot
+    volumes:
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+
+volumes:
+  db_data:

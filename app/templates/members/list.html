@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}Mitglieder{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3">Mitglieder</h1>
+  {% if current_user.is_admin %}<a class="btn btn-primary" href="{{ url_for('members.create_member') }}">Neu</a>{% endif %}
+</div>
+<form class="row g-2 mb-3" method="get">
+  <div class="col-md-6"><input class="form-control" type="text" name="q" value="{{ q }}" placeholder="Suche"></div>
+  <div class="col-md-3">
+    <select class="form-select" name="status">
+      <option value="">Alle</option>
+      <option value="active" {% if status=='active' %}selected{% endif %}>Aktiv</option>
+      <option value="inactive" {% if status=='inactive' %}selected{% endif %}>Inaktiv</option>
+    </select>
+  </div>
+  <div class="col-md-3"><button class="btn btn-outline-secondary">Filter</button></div>
+</form>
+<table class="table table-striped">
+  <thead><tr><th>Name</th><th>E-Mail</th><th>Status</th><th>Rolle</th><th></th></tr></thead>
+  <tbody>
+  {% for member in members %}
+    <tr>
+      <td>{{ member.full_name }}</td>
+      <td>{{ member.email or '-' }}</td>
+      <td>{{ member.status }}</td>
+      <td>{{ member.role.name if member.role else '-' }}</td>
+      <td>
+        {% if current_user.is_admin %}
+        <a class="btn btn-sm btn-secondary" href="{{ url_for('members.edit_member', member_id=member.id) }}">Bearbeiten</a>
+        {% if member.status == 'active' %}
+        <form method="post" action="{{ url_for('members.deactivate_member', member_id=member.id) }}" class="d-inline">
+          <button class="btn btn-sm btn-warning">Deaktivieren</button>
+        </form>
+        {% endif %}
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5">Keine Mitglieder gefunden.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
