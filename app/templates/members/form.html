@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">{{ title }}</h1>
+<form method="post">
+  {{ form.hidden_tag() }}
+  <div class="row g-3">
+    <div class="col-md-6">{{ form.first_name.label(class='form-label') }}{{ form.first_name(class='form-control') }}</div>
+    <div class="col-md-6">{{ form.last_name.label(class='form-label') }}{{ form.last_name(class='form-control') }}</div>
+    <div class="col-md-6">{{ form.email.label(class='form-label') }}{{ form.email(class='form-control') }}</div>
+    <div class="col-md-6">{{ form.phone.label(class='form-label') }}{{ form.phone(class='form-control') }}</div>
+    <div class="col-md-6">{{ form.street.label(class='form-label') }}{{ form.street(class='form-control') }}</div>
+    <div class="col-md-3">{{ form.zip_code.label(class='form-label') }}{{ form.zip_code(class='form-control') }}</div>
+    <div class="col-md-3">{{ form.city.label(class='form-label') }}{{ form.city(class='form-control') }}</div>
+    <div class="col-md-4">{{ form.join_date.label(class='form-label') }}{{ form.join_date(class='form-control') }}</div>
+    <div class="col-md-4">{{ form.status.label(class='form-label') }}{{ form.status(class='form-select') }}</div>
+    <div class="col-md-4">{{ form.role_id.label(class='form-label') }}{{ form.role_id(class='form-select') }}</div>
+    <div class="col-12">{{ form.notes.label(class='form-label') }}{{ form.notes(class='form-control', rows=3) }}</div>
+  </div>
+  <div class="mt-3">{{ form.submit(class='btn btn-primary') }}</div>
+</form>
+{% endblock %}
