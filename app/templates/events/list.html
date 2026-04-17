@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Events{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3">Events</h1>
+  {% if current_user.is_admin %}<a class="btn btn-primary" href="{{ url_for('events.create_event') }}">Neu</a>{% endif %}
+</div>
+<table class="table table-striped">
+  <thead><tr><th>Titel</th><th>Datum</th><th>Ort</th><th></th></tr></thead>
+  <tbody>
+  {% for event in events %}
+    <tr>
+      <td>{{ event.title }}</td>
+      <td>{{ event.event_date.strftime('%d.%m.%Y %H:%M') }}</td>
+      <td>{{ event.location or '-' }}</td>
+      <td>{% if current_user.is_admin %}<a class="btn btn-sm btn-secondary" href="{{ url_for('events.edit_event', event_id=event.id) }}">Bearbeiten</a>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4">Keine Events angelegt.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
