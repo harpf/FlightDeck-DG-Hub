@@ -8,7 +8,7 @@ from app.extensions import db, login_manager
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -29,15 +29,15 @@ class MemberRole(db.Model):
 
 class Member(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    first_name = db.Column(db.String(120), nullable=False, index=True)
-    last_name = db.Column(db.String(120), nullable=False, index=True)
+    first_name = db.Column(db.String(120), nullable=False)
+    last_name = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(255), unique=True)
     phone = db.Column(db.String(64))
     street = db.Column(db.String(255))
     zip_code = db.Column(db.String(20))
     city = db.Column(db.String(120))
-    join_date = db.Column(db.Date, default=datetime.utcnow, nullable=False, index=True)
-    status = db.Column(db.String(20), default="active", nullable=False, index=True)
+    join_date = db.Column(db.Date, default=datetime.utcnow, nullable=False)
+    status = db.Column(db.String(20), default="active", nullable=False)
     notes = db.Column(db.Text)
 
     role_id = db.Column(db.Integer, db.ForeignKey("member_role.id"), nullable=True)
@@ -55,7 +55,7 @@ class Event(db.Model):
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
     location = db.Column(db.String(255))
-    event_date = db.Column(db.DateTime, nullable=False, index=True)
+    event_date = db.Column(db.DateTime, nullable=False)
 
     registrations = db.relationship("MemberEventRegistration", back_populates="event", lazy=True)
 
@@ -74,4 +74,4 @@ class MemberEventRegistration(db.Model):
 
 @login_manager.user_loader
 def load_user(user_id: str):
-    return db.session.get(User, int(user_id))
+    return User.query.get(int(user_id))
