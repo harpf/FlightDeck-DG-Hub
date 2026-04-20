@@ -32,9 +32,9 @@ services:
       apk add --no-cache openssl &&
       mkdir -p /etc/letsencrypt/live/${CERT_NAME} &&
       if [ ! -f /etc/letsencrypt/live/${CERT_NAME}/fullchain.pem ] || [ ! -f /etc/letsencrypt/live/${CERT_NAME}/privkey.pem ]; then
-        openssl req -x509 -nodes -newkey rsa:2048 -days 1
-          -keyout /etc/letsencrypt/live/${CERT_NAME}/privkey.pem
-          -out /etc/letsencrypt/live/${CERT_NAME}/fullchain.pem
+        openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+          -keyout /etc/letsencrypt/live/${CERT_NAME}/privkey.pem \
+          -out /etc/letsencrypt/live/${CERT_NAME}/fullchain.pem \
           -subj '/CN=${CERT_NAME}';
       fi
       "
@@ -60,8 +60,8 @@ services:
       CERT_NAME: ${CERT_NAME}
     command: >
       /bin/sh -c "
-      envsubst '\$DOMAIN \$ALT_DOMAIN \$CERT_NAME'
-      < /etc/nginx/templates/clubcore.conf.template
+      envsubst '\$DOMAIN \$ALT_DOMAIN \$CERT_NAME' \
+      < /etc/nginx/templates/clubcore.conf.template \
       > /etc/nginx/conf.d/default.conf &&
       nginx -g 'daemon off;'
       "

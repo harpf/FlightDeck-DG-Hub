@@ -38,7 +38,14 @@ requirements.txt
 Dockerfile
 docker-compose.yml
 docker-compose.override.yml
-nginx/conf.d/clubcore.conf
+.env.example
+nginx/
+ ├─ conf.d/
+ └─ templates/
+     └─ clubcore.conf.template
+certbot/
+ ├─ conf/
+ └─ www/
 ```
 
 ---
@@ -158,6 +165,32 @@ cd ClubCore
 ```bash
 cp .env.example .env
 ```
+
+### Beispiel für `.env.example`
+
+```env
+SECRET_KEY=change-me
+DATABASE_URL=mysql+pymysql://clubcore:clubcore@db:3306/clubcore
+
+DOMAIN=verein.example.com
+ALT_DOMAIN=www.verein.example.com
+CERT_NAME=verein.example.com
+LETSENCRYPT_EMAIL=admin@example.com
+
+MARIADB_DATABASE=clubcore
+MARIADB_USER=clubcore
+MARIADB_PASSWORD=clubcore
+MARIADB_ROOT_PASSWORD=rootsecret
+```
+
+### Bedeutung der HTTPS-Variablen
+
+- `DOMAIN`: Hauptdomain der Anwendung
+- `ALT_DOMAIN`: zusätzliche Domain, z. B. `www`
+- `CERT_NAME`: Verzeichnisname des Zertifikats unter `/etc/letsencrypt/live/...`
+- `LETSENCRYPT_EMAIL`: E-Mail-Adresse für Let's Encrypt
+
+> `CERT_NAME` sollte normalerweise der Hauptdomain entsprechen, z. B. `verein.example.com`.
 
 ---
 
@@ -326,11 +359,152 @@ Dabei übernimmt `nginx` den Reverse Proxy und nutzt Zertifikate von Let's Encry
 
 ## Wichtiger Hinweis
 
-Das Standard-Compose mit `nginx` erwartet gültige Zertifikatsdateien.  
-Wenn diese nicht vorhanden sind, startet `nginx` nicht.
+Das HTTPS-Setup verwendet:
 
-Für die lokale Entwicklung deshalb bitte das Override-Setup verwenden.  
-Für produktive oder servernahe Deployments ist dagegen das vollständige HTTPS-Setup mit Certbot vorgesehen.
+- ein Nginx-Template mit Platzhaltern aus der `.env`
+- `envsubst` beim Start des Nginx-Containers
+- einen `init-letsencrypt`-Container, der beim ersten Start ein temporäres Dummy-Zertifikat erzeugt
+
+Dadurch kann `nginx` bereits starten, **bevor** das erste echte Let's-Encrypt-Zertifikat vorhanden ist.
+
+---
+
+## Produktives `docker-compose.yml`
+
+```yaml
+services:
+  app:
+    build: .
+    container_name: clubcore_app
+    env_file:
+      - .env
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: mariadb:11.4
+    container_name: clubcore_db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+
+  init-letsencrypt:
+    image: alpine:3.20
+    container_name: clubcore_init_letsencrypt
+    env_file:
+      - .env
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+    command: >
+      sh -c "
+      apk add --no-cache openssl &&
+      mkdir -p /etc/letsencrypt/live/${CERT_NAME} &&
+      if [ ! -f /etc/letsencrypt/live/${CERT_NAME}/fullchain.pem ] || [ ! -f /etc/letsencrypt/live/${CERT_NAME}/privkey.pem ]; then
+        openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+          -keyout /etc/letsencrypt/live/${CERT_NAME}/privkey.pem \
+          -out /etc/letsencrypt/live/${CERT_NAME}/fullchain.pem \
+          -subj '/CN=${CERT_NAME}';
+      fi
+      "
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: clubcore_nginx
+    depends_on:
+      app:
+        condition: service_started
+      init-letsencrypt:
+        condition: service_completed_successfully
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./certbot/www:/var/www/certbot:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+    environment:
+      DOMAIN: ${DOMAIN}
+      ALT_DOMAIN: ${ALT_DOMAIN}
+      CERT_NAME: ${CERT_NAME}
+    command: >
+      /bin/sh -c "
+      envsubst '\$DOMAIN \$ALT_DOMAIN \$CERT_NAME' \
+      < /etc/nginx/templates/clubcore.conf.template \
+      > /etc/nginx/conf.d/default.conf &&
+      nginx -g 'daemon off;'
+      "
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: clubcore_certbot
+    env_file:
+      - .env
+    volumes:
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+    entrypoint: /bin/sh
+    command: -c "trap exit TERM; while :; do sleep 12h & wait $${!}; certbot renew --webroot -w /var/www/certbot; done"
+
+volumes:
+  db_data:
+```
+
+---
+
+## Nginx-Template
+
+Pfad:
+
+```text
+nginx/templates/clubcore.conf.template
+```
+
+Inhalt:
+
+```nginx
+server {
+    listen 80;
+    server_name ${DOMAIN} ${ALT_DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name ${DOMAIN} ${ALT_DOMAIN};
+
+    ssl_certificate /etc/letsencrypt/live/${CERT_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${CERT_NAME}/privkey.pem;
+
+    location / {
+        proxy_pass http://app:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### Warum ein Template?
+
+Docker Compose kann Variablen aus `.env` direkt in `docker-compose.yml` ersetzen.  
+Nginx liest diese `.env`-Variablen aber nicht automatisch in statischen Konfigurationsdateien.
+
+Deshalb wird beim Start des Nginx-Containers die fertige Konfiguration aus einem Template erzeugt.
 
 ---
 
@@ -340,51 +514,63 @@ Vor dem Zertifikatsbezug müssen:
 
 - Domain(s) korrekt auf den Server zeigen
 - Port `80` und `443` erreichbar sein
-- Nginx-Konfiguration und Domainnamen korrekt angepasst sein
+- die `.env` korrekt gepflegt sein
+- das Nginx-Template vorhanden sein
 
-Beispiel-Domains:
+Beispiel:
 
-- `server.domain.tld`
-- `verein.domain.tld`
+```env
+DOMAIN=verein.example.com
+ALT_DOMAIN=www.verein.example.com
+CERT_NAME=verein.example.com
+LETSENCRYPT_EMAIL=admin@example.com
+```
 
 ---
 
-## HTTPS-Erstzertifikat anfordern
+## Erststart mit HTTPS
 
-Domains und E-Mail-Adresse anpassen:
+### Container starten
+
+```bash
+docker compose -f docker-compose.yml up -d --build
+```
+
+Beim ersten Start wird durch `init-letsencrypt` ein temporäres Zertifikat erzeugt, damit `nginx` hochfahren kann.
+
+### Echtes Let's-Encrypt-Zertifikat anfordern
 
 ```bash
 docker compose run --rm certbot certonly \
   --webroot -w /var/www/certbot \
-  -d server.domain.tld -d verein.domain.tld \
-  --email admin@domain.tld --agree-tos --no-eff-email
+  -d "$DOMAIN" -d "$ALT_DOMAIN" \
+  --email "$LETSENCRYPT_EMAIL" \
+  --agree-tos --no-eff-email
 ```
 
-Danach Nginx neu laden:
+### Nginx neu laden
 
 ```bash
 docker compose exec nginx nginx -s reload
 ```
 
+Danach sollte `nginx` das echte Zertifikat verwenden.
+
 ---
 
-## Produktivstart mit HTTPS
+## Zertifikatserneuerung
 
-Falls für die Entwicklung ein `docker-compose.override.yml` vorhanden ist, kann es für den produktiven Start ignoriert werden, indem nur das Haupt-Compose verwendet wird oder die Konfiguration entsprechend getrennt wird.
+Der `certbot`-Container versucht regelmäßig eine Erneuerung auszuführen:
 
-Standardstart:
-
-```bash
-docker compose up -d --build
+```text
+certbot renew --webroot -w /var/www/certbot
 ```
 
-Falls das lokale Override aktiv ist und `nginx` auf ein Profil gesetzt wurde, muss `nginx` explizit über das Profil gestartet werden:
+Falls ein Zertifikat erneuert wurde, sollte `nginx` anschließend neu geladen werden:
 
 ```bash
-docker compose --profile prod up -d --build
+docker compose exec nginx nginx -s reload
 ```
-
-> Empfehlung: Für Produktion und Entwicklung getrennte Compose-Dateien oder klar getrennte Profile verwenden.
 
 ---
 
@@ -393,7 +579,48 @@ docker compose --profile prod up -d --build
 Nach erfolgreichem Zertifikatsbezug und Start von Nginx sollte die Anwendung über HTTPS erreichbar sein:
 
 ```text
-https://verein.domain.tld
+https://verein.example.com
+```
+
+---
+
+## Unterschied zwischen Development und Production
+
+### Development ohne HTTPS
+
+Verwendet automatisch:
+
+- `docker-compose.yml`
+- `docker-compose.override.yml`
+
+Start:
+
+```bash
+docker compose up -d --build
+```
+
+Zugriff:
+
+```text
+http://localhost:5000
+```
+
+### Production mit HTTPS
+
+Verwendet nur:
+
+- `docker-compose.yml`
+
+Start:
+
+```bash
+docker compose -f docker-compose.yml up -d --build
+```
+
+Zugriff:
+
+```text
+https://<deine-domain>
 ```
 
 ---
@@ -453,18 +680,20 @@ cannot load certificate
 /etc/letsencrypt/live/...
 ```
 
-dann fehlen die TLS-Zertifikate.
+dann fehlen Zertifikate oder `CERT_NAME` passt nicht zum tatsächlichen Zertifikatspfad.
+
+Prüfen:
+
+- existiert `./certbot/conf/live/${CERT_NAME}/fullchain.pem`
+- existiert `./certbot/conf/live/${CERT_NAME}/privkey.pem`
+- stimmt `CERT_NAME` in der `.env`
+- ist das Nginx-Template korrekt
 
 Für die lokale Entwicklung:
 
 - `docker-compose.override.yml` verwenden
 - direkt auf `http://localhost:5000` gehen
 - `nginx` nicht lokal erzwingen
-
-Für HTTPS:
-
-- erst Zertifikate mit Certbot erzeugen
-- danach `nginx` neu laden
 
 ---
 
@@ -484,6 +713,23 @@ Im Dev-Setup muss Port `5000` gemappt sein:
 ports:
   - "5000:5000"
 ```
+
+Im HTTPS-Setup zusätzlich prüfen:
+
+```bash
+docker compose logs -f nginx
+```
+
+---
+
+### Certbot kann kein Zertifikat holen
+
+Prüfen:
+
+- zeigen `DOMAIN` und `ALT_DOMAIN` auf den Server?
+- ist Port `80` öffentlich erreichbar?
+- wird `/.well-known/acme-challenge/` korrekt ausgeliefert?
+- ist `LETSENCRYPT_EMAIL` gesetzt?
 
 ---
 
