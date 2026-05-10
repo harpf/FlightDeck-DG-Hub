@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Registrierung</h1>
+<form method="post" class="col-12 col-md-8 col-lg-6">{{ form.hidden_tag() }}
+{{ form.username.label }} {{ form.username(class='form-control mb-2') }}
+{{ form.email.label }} {{ form.email(class='form-control mb-2') }}
+{{ form.password.label }} {{ form.password(class='form-control mb-2') }}
+<div class="form-check mb-2">{{ form.privacy_consent(class='form-check-input') }} {{ form.privacy_consent.label(class='form-check-label') }}</div>
+{{ form.submit(class='btn btn-success') }}
+</form>
+{% endblock %}
