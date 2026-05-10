@@ -5,7 +5,7 @@ from flask import Flask, render_template
 from config import Config
 from app.extensions import db, login_manager, migrate
 from app.models import User
-from app.routes import api_bp, auth_bp, events_bp, main_bp, members_bp, roles_bp
+from app.routes import admin_bp, api_bp, auth_bp, main_bp, products_bp
 
 
 def create_app(config_class=Config):
@@ -18,14 +18,14 @@ def create_app(config_class=Config):
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
-    app.register_blueprint(members_bp)
-    app.register_blueprint(roles_bp)
-    app.register_blueprint(events_bp)
+    app.register_blueprint(products_bp)
+    app.register_blueprint(admin_bp)
     app.register_blueprint(api_bp)
 
     configure_logging(app)
     register_error_handlers(app)
     register_cli_commands(app)
+    register_security_headers(app)
 
     return app
 
@@ -33,6 +33,16 @@ def create_app(config_class=Config):
 def configure_logging(app: Flask) -> None:
     if not app.debug:
         logging.basicConfig(level=logging.INFO)
+
+
+def register_security_headers(app: Flask) -> None:
+    @app.after_request
+    def secure_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;"
+        return response
 
 
 def register_error_handlers(app: Flask) -> None:
@@ -52,15 +62,17 @@ def register_error_handlers(app: Flask) -> None:
 def register_cli_commands(app: Flask) -> None:
     @app.cli.command("create-admin")
     def create_admin_command():
-        username = "admin"
-        password = "admin1234"
-        user = User.query.filter_by(username=username).first()
+        password = app.config.get("BOOTSTRAP_ADMIN_PASSWORD")
+        if not password:
+            print("BOOTSTRAP_ADMIN_PASSWORD nicht gesetzt. Admin wurde NICHT erstellt.")
+            return
+        user = User.query.filter_by(username="admin").first()
         if user:
             print("Admin existiert bereits.")
             return
 
-        user = User(username=username, is_admin=True)
+        user = User(username="admin", email="admin@flightdeck.local", is_admin=True, privacy_consent=True)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
-        print("Admin erstellt: admin / admin1234")
+        print("Admin erstellt.")

@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>{{ title }}</h1>
+<form method="post">{{ form.hidden_tag() }}
+<div class="row g-2">
+<div class="col-12 col-md-6">{{ form.name.label }} {{ form.name(class='form-control') }}</div>
+<div class="col-12 col-md-6">{{ form.manufacturer.label }} {{ form.manufacturer(class='form-control') }}</div>
+<div class="col-12 col-md-4">{{ form.category.label }} {{ form.category(class='form-select') }}</div>
+<div class="col-12 col-md-4">{{ form.disc_type.label }} {{ form.disc_type(class='form-control') }}</div>
+<div class="col-12 col-md-4">{{ form.plastic_type.label }} {{ form.plastic_type(class='form-control') }}</div>
+<div class="col-6 col-md-3">{{ form.speed.label }} {{ form.speed(class='form-control') }}</div>
+<div class="col-6 col-md-3">{{ form.glide.label }} {{ form.glide(class='form-control') }}</div>
+<div class="col-6 col-md-3">{{ form.turn.label }} {{ form.turn(class='form-control') }}</div>
+<div class="col-6 col-md-3">{{ form.fade.label }} {{ form.fade(class='form-control') }}</div>
+<div class="col-6">{{ form.diameter_cm.label }} {{ form.diameter_cm(class='form-control') }}</div>
+<div class="col-6">{{ form.weight_range_g.label }} {{ form.weight_range_g(class='form-control') }}</div>
+<div class="col-12">{{ form.stability.label }} {{ form.stability(class='form-control') }}</div>
+<div class="col-12">{{ form.product_url.label }} {{ form.product_url(class='form-control') }}</div>
+<div class="col-12">{{ form.description.label }} {{ form.description(class='form-control') }}</div>
+</div>
+{{ form.submit(class='btn btn-success mt-3') }}
+</form>
+{% endblock %}

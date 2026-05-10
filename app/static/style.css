@@ -1,0 +1,7 @@
+:root{--dg-green:#2d6a4f;--dg-lime:#95d5b2;--dg-dark:#1b4332;--dg-sand:#f1faee}
+body{background:linear-gradient(180deg,var(--dg-sand),#fff);min-height:100vh}
+.navbar{background:linear-gradient(90deg,var(--dg-dark),var(--dg-green))!important}
+.hero{background:radial-gradient(circle at top right,var(--dg-lime),#fff);border-radius:1rem;padding:1rem}
+.product-card{transition:.2s transform,.2s box-shadow}
+.product-card:hover{transform:translateY(-3px);box-shadow:0 .5rem 1rem rgba(0,0,0,.15)}
+@media (max-width: 768px){.hero h1{font-size:1.4rem}}

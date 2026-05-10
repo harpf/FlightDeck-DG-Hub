@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Admin Interface</h1>
+<div class="row g-3">
+<div class="col-12 col-lg-6"><div class="card"><div class="card-body"><h2 class="h5">API Token erstellen</h2><form method="post" action="{{ url_for('admin.create_api_token') }}">{{ token_form.hidden_tag() }}{{ token_form.name(class='form-control mb-2', placeholder='Integration Name') }}{{ token_form.submit(class='btn btn-warning') }}</form></div></div></div>
+<div class="col-12 col-lg-6"><div class="card"><div class="card-body"><h2 class="h5">Aktive Token</h2><ul>{% for t in tokens %}<li>{{ t.name }} · {{ t.created_at.strftime('%Y-%m-%d') }} {% if t.is_active %}<form method="post" class="d-inline" action="{{ url_for('admin.deactivate_api_token', token_id=t.id) }}"><button class="btn btn-sm btn-outline-danger">deaktivieren</button></form>{% endif %}</li>{% else %}<li>Keine Tokens.</li>{% endfor %}</ul></div></div></div>
+</div>
+<h2 class="h5 mt-4">Source Requests</h2><p class="text-muted">Hinweis: Scanner respektiert robots.txt automatisch.</p>
+{% for sr in source_requests %}<form method="post" action="{{ url_for('admin.update_source_status', request_id=sr.id) }}" class="mb-2">{{ status_form.hidden_tag() }}<strong>{{ sr.source_url }}</strong> ({{ sr.status }})<select name="status" class="form-select d-inline w-auto ms-2"><option value="open">Open</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select><button class="btn btn-sm btn-primary ms-2">Speichern</button>{% if sr.status == 'approved' %}<button formaction="{{ url_for('admin.scan_source', request_id=sr.id) }}" class="btn btn-sm btn-success ms-2">Jetzt scannen</button>{% endif %}</form>{% else %}<p>Keine Requests.</p>{% endfor %}
+{% endblock %}

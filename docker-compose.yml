@@ -1,16 +1,21 @@
 services:
   app:
     build: .
-    container_name: clubcore_app
+    container_name: flightdeck_app
     env_file:
       - .env
     depends_on:
       - db
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
 
   db:
     image: mariadb:11.4
-    container_name: clubcore_db
+    container_name: flightdeck_db
     restart: unless-stopped
     environment:
       MARIADB_DATABASE: ${MARIADB_DATABASE}
@@ -19,34 +24,15 @@ services:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
-
-  init-letsencrypt:
-    image: alpine:3.20
-    container_name: clubcore_init_letsencrypt
-    env_file:
-      - .env
-    volumes:
-      - ./certbot/conf:/etc/letsencrypt
-    command: >
-      sh -c "
-      apk add --no-cache openssl &&
-      mkdir -p /etc/letsencrypt/live/${CERT_NAME} &&
-      if [ ! -f /etc/letsencrypt/live/${CERT_NAME}/fullchain.pem ] || [ ! -f /etc/letsencrypt/live/${CERT_NAME}/privkey.pem ]; then
-        openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
-          -keyout /etc/letsencrypt/live/${CERT_NAME}/privkey.pem \
-          -out /etc/letsencrypt/live/${CERT_NAME}/fullchain.pem \
-          -subj '/CN=${CERT_NAME}';
-      fi
-      "
+    security_opt:
+      - no-new-privileges:true
 
   nginx:
     image: nginx:1.27-alpine
-    container_name: clubcore_nginx
+    container_name: flightdeck_nginx
     depends_on:
       app:
         condition: service_started
-      init-letsencrypt:
-        condition: service_completed_successfully
     ports:
       - "80:80"
       - "443:443"
@@ -66,17 +52,12 @@ services:
       nginx -g 'daemon off;'
       "
     restart: unless-stopped
-
-  certbot:
-    image: certbot/certbot:latest
-    container_name: clubcore_certbot
-    env_file:
-      - .env
-    volumes:
-      - ./certbot/www:/var/www/certbot
-      - ./certbot/conf:/etc/letsencrypt
-    entrypoint: /bin/sh
-    command: -c "trap exit TERM; while :; do sleep 12h & wait $${!}; certbot renew --webroot -w /var/www/certbot; done"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
 
 volumes:
   db_data:

@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>{{ product.name }}</h1>
+<p>{{ product.manufacturer }} · {{ product.category }}</p>
+<div class="row g-2 mb-3">
+  <div class="col-6 col-md-3"><strong>Type:</strong> {{ product.disc_type or '-' }}</div>
+  <div class="col-6 col-md-3"><strong>Plastic:</strong> {{ product.plastic_type or '-' }}</div>
+  <div class="col-6 col-md-3"><strong>Speed/Glide:</strong> {{ product.speed or '-' }}/{{ product.glide or '-' }}</div>
+  <div class="col-6 col-md-3"><strong>Turn/Fade:</strong> {{ product.turn if product.turn is not none else '-' }}/{{ product.fade or '-' }}</div>
+  <div class="col-6 col-md-3"><strong>Durchmesser:</strong> {{ product.diameter_cm or '-' }} cm</div>
+  <div class="col-6 col-md-3"><strong>Gewicht:</strong> {{ product.weight_range_g or '-' }}</div>
+  <div class="col-12"><strong>Stability:</strong> {{ product.stability or '-' }}</div>
+</div>
+<p>{{ product.description }}</p>
+{% if product.product_url %}<p><a href="{{ product.product_url }}" target="_blank" rel="noopener">Externe Quelle</a></p>{% endif %}
+<h2>Bewertungen</h2>
+{% for r in reviews %}<div class="card mb-2"><div class="card-body"><strong>{{ r.rating }}/5</strong> von {{ r.user.username }}<br>{{ r.comment or '' }}</div></div>{% else %}<p>Noch keine Bewertungen.</p>{% endfor %}
+{% if current_user.is_authenticated %}
+<h3>Deine Bewertung</h3>
+<form method="post">{{ form.hidden_tag() }}{{ form.rating.label }} {{ form.rating(class='form-control mb-2') }}{{ form.comment.label }} {{ form.comment(class='form-control mb-2') }}{{ form.submit(class='btn btn-primary') }}</form>
+{% endif %}
+{% endblock %}

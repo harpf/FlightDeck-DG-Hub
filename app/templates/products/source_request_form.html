@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Neue Source anfragen</h1>
+<form method="post">{{ form.hidden_tag() }}
+{{ form.source_url.label }} {{ form.source_url(class='form-control mb-2') }}
+{{ form.note.label }} {{ form.note(class='form-control mb-2') }}
+{{ form.submit(class='btn btn-warning') }}
+</form>
+{% endblock %}
