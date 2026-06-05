@@ -221,16 +221,31 @@ def scan_source(request_id: int):
     if not is_scraping_allowed(source_request.source_url):
         flash("robots.txt verbietet das Scannen dieser Quelle.", "danger")
         return redirect(url_for('admin.dashboard'))
-    scanned = scan_products_from_url(source_request.source_url)
+    try:
+        scanned = scan_products_from_url(source_request.source_url)
+    except Exception as exc:  # network / parsing failure — don't 500 the admin UI
+        flash(f"Scan fehlgeschlagen: {exc}", "danger")
+        return redirect(url_for('admin.dashboard'))
+
+    found = len(scanned)
+    if found == 0:
+        flash("Keine strukturierten Produktdaten gefunden (JSON-LD).", "warning")
+        return redirect(url_for('admin.dashboard'))
+
     created = 0
+    duplicates = 0
     for item in scanned:
         exists = Product.query.filter_by(name=item.name, manufacturer=item.manufacturer).first()
         if exists:
+            duplicates += 1
             continue
         db.session.add(Product(name=item.name, manufacturer=item.manufacturer, category='Disc', description=item.description, product_url=item.product_url))
         created += 1
     db.session.commit()
-    flash(f"Scan abgeschlossen. Neue Einträge: {created}", "success")
+    flash(
+        f"Scan abgeschlossen: {found} gefunden, {created} neu, {duplicates} bereits vorhanden.",
+        "success",
+    )
     return redirect(url_for('admin.dashboard'))
 
 @admin_bp.route("/sources/<int:request_id>", methods=["POST"])
