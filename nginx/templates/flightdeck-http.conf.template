@@ -1,0 +1,21 @@
+# HTTP-only reverse proxy for the production lab deployment.
+# Used by docker-compose.prod.yml. TLS can be added later via certbot using
+# the existing flightdeck.conf.template (see docs/DEPLOYMENT.md).
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    # Keep the ACME challenge path open so a Let's Encrypt cert can be issued
+    # later without changing this config.
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        proxy_pass http://app:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

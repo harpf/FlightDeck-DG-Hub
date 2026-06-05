@@ -60,6 +60,17 @@ def register_error_handlers(app: Flask) -> None:
 
 
 def register_cli_commands(app: Flask) -> None:
+    @app.cli.command("init-db")
+    def init_db_command():
+        """Create all database tables (first-boot schema bootstrap).
+
+        Used instead of `flask db upgrade` because the project ships without a
+        pre-generated migrations/ folder. Flask-Migrate remains available for
+        incremental schema changes after the initial deployment.
+        """
+        db.create_all()
+        print("Datenbankschema erstellt.")
+
     @app.cli.command("create-admin")
     def create_admin_command():
         password = app.config.get("BOOTSTRAP_ADMIN_PASSWORD")

@@ -1,0 +1,27 @@
+# Production override for the lab deployment (HTTP-only, gunicorn).
+#
+# Usage (does NOT load docker-compose.override.yml, so no dev server):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# This keeps the production `app` (gunicorn) and `db` services from the base
+# file and only swaps nginx into HTTP-only mode so the site is reachable
+# immediately without TLS certificates.
+services:
+  nginx:
+    # The command writes the rendered config into /etc/nginx/conf.d, so the
+    # root filesystem must be writable here (base sets read_only: true).
+    read_only: false
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./certbot/www:/var/www/certbot:ro
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+    command: >
+      /bin/sh -c "
+      envsubst '$$DOMAIN'
+      < /etc/nginx/templates/flightdeck-http.conf.template
+      > /etc/nginx/conf.d/default.conf &&
+      nginx -g 'daemon off;'
+      "
