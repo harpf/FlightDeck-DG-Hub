@@ -2,9 +2,9 @@
 
 **Modul:** DBWE.TA1A.PA – Datenbanken und Webentwicklung
 **Studiengang:** HFINFA / HFINFP, 3. Studienjahr
-**Verfasser:** Max Mustermann _(Filler – bitte ersetzen)_
+**Verfasser:** Jonas Zauner
 **Examinator:** _<Name eintragen>_
-**Abgabedatum:** 30.06.2026 _(Filler – bitte ersetzen)_
+**Abgabedatum:** 05.06.2026
 
 **Fach:** Datenbanken und Webentwicklung (DBWE)
 **Anwendung:** FlightDeck DG Hub – Disc-Golf-Wissensplattform
