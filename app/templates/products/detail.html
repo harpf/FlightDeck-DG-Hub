@@ -29,13 +29,27 @@
 
 {% if product.speed is not none or product.glide is not none or product.turn is not none or product.fade is not none %}
 <h2 class="h5">Flugwerte</h2>
-<div class="flight-stats mb-4">
+<div class="flight-stats mb-3">
   {{ flight_stat('Speed', product.speed) }}{{ flight_stat('Glide', product.glide) }}{{ flight_stat('Turn', product.turn) }}{{ flight_stat('Fade', product.fade) }}
 </div>
+{% if flight_svg %}
+<div class="d-flex flex-wrap align-items-start gap-3 mb-4">
+  <figure class="mb-0">
+    {{ flight_svg }}
+    <figcaption class="text-muted small text-center mt-1">
+      Flugkurve (RHBH) – schematisch aus Turn &amp; Fade
+    </figcaption>
+  </figure>
+</div>
+{% endif %}
 {% endif %}
 
 <div class="row">
   <div class="col-12 col-lg-8">
+    {% if product.image_url %}
+    <img src="{{ product.image_url }}" alt="{{ product.name }}" loading="lazy"
+         class="img-fluid rounded mb-3" style="max-height: 320px;">
+    {% endif %}
     {% if product.description %}<p>{{ product.description }}</p>{% endif %}
     {% if product.product_url %}
     <a href="{{ product.product_url }}" target="_blank" rel="noopener" class="btn btn-outline-success btn-sm mb-3">

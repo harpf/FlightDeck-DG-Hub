@@ -30,6 +30,13 @@ def test_security_headers_present(client):
     assert "Content-Security-Policy" in resp.headers
 
 
+def test_csp_allows_external_https_product_images(client):
+    # Scanned discs hotlink images from approved external shops over HTTPS.
+    csp = client.get("/").headers["Content-Security-Policy"]
+    img_src = next(part for part in csp.split(";") if part.strip().startswith("img-src"))
+    assert "https:" in img_src
+
+
 def test_logged_in_user_can_create_product(client, user):
     client.post("/auth/login", data={"username": "tester", "password": "password123"})
     resp = client.post(

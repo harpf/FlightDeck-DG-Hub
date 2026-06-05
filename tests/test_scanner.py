@@ -172,3 +172,67 @@ def test_scan_respects_max_products_cap():
         max_products=3,
     )
     assert len(products) == 3
+
+
+# --- Disc data enrichment (flight numbers, type, image, description) --------
+
+from app.scanner import extract_meta_description, parse_flight_numbers  # noqa: E402
+
+
+def test_parse_flight_numbers_including_negative_turn():
+    text = "Distance Driver Disc - Speed: 11 - Glide: 5 - Turn: -1 - Fade: 3."
+    assert parse_flight_numbers(text) == {"speed": 11, "glide": 5, "turn": -1, "fade": 3}
+
+
+def test_parse_flight_numbers_missing_returns_none():
+    assert parse_flight_numbers("no numbers here") == {
+        "speed": None,
+        "glide": None,
+        "turn": None,
+        "fade": None,
+    }
+
+
+def test_extract_meta_description_prefers_name_description():
+    html = (
+        '<meta name="description" content="Die Axiom Defy - Speed: 11">'
+        '<meta property="og:description" content="fallback">'
+    )
+    assert extract_meta_description(html) == "Die Axiom Defy - Speed: 11"
+
+
+def test_extract_meta_description_falls_back_to_og():
+    html = '<meta property="og:description" content="Only OG description">'
+    assert extract_meta_description(html) == "Only OG description"
+
+
+def test_extract_products_enriches_from_jsonld_and_meta():
+    html = """
+    <meta name="description" content="Die Axiom Defy ist eine &uuml;berstabile Distance Driver Disc - Speed: 11 - Glide: 5 - Turn: -1 - Fade: 3.">
+    <script type="application/ld+json">
+    {"@type":"Product","name":"Axiom Defy | Distance Driver | discgolf4you",
+     "brand":{"@type":"Brand","name":"Axiom"},
+     "category":"Discs &gt; Distance Driver",
+     "image":[{"@type":"ImageObject","url":"https://shop.example/img/defy.jpg"}],
+     "url":"/pr/axiom-defy/"}
+    </script>
+    """
+    products = extract_products_from_html(html, "https://shop.example/pr/axiom-defy/")
+    assert len(products) == 1
+    p = products[0]
+    assert p.name == "Axiom Defy"
+    assert p.manufacturer == "Axiom"
+    assert p.disc_type == "Distance Driver"
+    assert p.image_url == "https://shop.example/img/defy.jpg"
+    assert (p.speed, p.glide, p.turn, p.fade) == (11, 5, -1, 3)
+    assert "berstabile" in p.description
+
+
+def test_extract_products_handles_image_as_plain_string():
+    html = (
+        '<script type="application/ld+json">'
+        '{"@type":"Product","name":"Disc","image":"https://shop.example/x.jpg"}'
+        "</script>"
+    )
+    products = extract_products_from_html(html, "https://shop.example/pr/x/")
+    assert products[0].image_url == "https://shop.example/x.jpg"

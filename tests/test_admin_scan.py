@@ -61,6 +61,34 @@ def test_scan_handles_fetch_error_without_500(client, db, admin, monkeypatch):
     assert "fehlgeschlagen".encode() in resp.data
 
 
+def test_scan_persists_disc_data_and_image(client, db, admin, monkeypatch):
+    src = _approved_source(db, admin)
+    monkeypatch.setattr("app.routes.is_scraping_allowed", lambda url: True)
+    monkeypatch.setattr(
+        "app.routes.scan_products_from_url",
+        lambda url: [
+            ScannedProduct(
+                name="Axiom Defy",
+                description="Distance Driver",
+                manufacturer="Axiom",
+                product_url="https://shop.example/pr/axiom-defy/",
+                disc_type="Distance Driver",
+                image_url="https://shop.example/img/defy.jpg",
+                speed=11,
+                glide=5,
+                turn=-1,
+                fade=3,
+            )
+        ],
+    )
+    _login_admin(client)
+    client.post(f"/admin/sources/{src.id}/scan", follow_redirects=True)
+    disc = Product.query.filter_by(name="Axiom Defy").one()
+    assert disc.disc_type == "Distance Driver"
+    assert disc.image_url == "https://shop.example/img/defy.jpg"
+    assert (disc.speed, disc.glide, disc.turn, disc.fade) == (11, 5, -1, 3)
+
+
 def test_scan_counts_existing_products_as_duplicates(client, db, admin, monkeypatch):
     src = _approved_source(db, admin)
     db.session.add(Product(name="Axiom Balance", manufacturer="Axiom", category="Disc"))

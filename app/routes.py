@@ -5,6 +5,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 from flask_login import current_user, login_required, login_user, logout_user
 
 from app.extensions import db
+from app.flightchart import render_flight_svg
 from app.forms import ApiTokenForm, LoginForm, ProductForm, ProductReviewForm, RegisterForm, SourceRequestForm, SourceRequestStatusForm
 from app.models import ApiToken, Product, ProductReview, SourceRequest, User
 from app.openapi import build_openapi_spec
@@ -146,7 +147,8 @@ def product_detail(product_id):
         flash("Bewertung gespeichert.", "success")
         return redirect(url_for("products.product_detail", product_id=product.id))
     reviews = ProductReview.query.filter_by(product_id=product.id).order_by(ProductReview.created_at.desc()).all()
-    return render_template("products/detail.html", product=product, reviews=reviews, form=form)
+    flight_svg = render_flight_svg(product.speed, product.glide, product.turn, product.fade)
+    return render_template("products/detail.html", product=product, reviews=reviews, form=form, flight_svg=flight_svg)
 
 
 @products_bp.route("/sources/request", methods=["GET", "POST"])
@@ -239,7 +241,19 @@ def scan_source(request_id: int):
         if exists:
             duplicates += 1
             continue
-        db.session.add(Product(name=item.name, manufacturer=item.manufacturer, category='Disc', description=item.description, product_url=item.product_url))
+        db.session.add(Product(
+            name=item.name,
+            manufacturer=item.manufacturer,
+            category='Disc',
+            description=item.description,
+            product_url=item.product_url,
+            image_url=item.image_url,
+            disc_type=item.disc_type,
+            speed=item.speed,
+            glide=item.glide,
+            turn=item.turn,
+            fade=item.fade,
+        ))
         created += 1
     db.session.commit()
     flash(

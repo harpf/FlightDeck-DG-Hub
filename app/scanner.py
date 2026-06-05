@@ -4,6 +4,7 @@ import json
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from html import unescape as html_unescape
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
 from urllib.request import Request, urlopen
@@ -27,6 +28,16 @@ _CLASS_RE = re.compile(r'class="([^"]*)"', flags=re.IGNORECASE)
 # WooCommerce renders each catalogue tile as <a class="woocommerce-LoopProduct-link ...">
 _PRODUCT_LINK_MARKER = "woocommerce-loopproduct-link"
 
+_META_RE = re.compile(r"<meta\b([^>]*)>", flags=re.IGNORECASE)
+_NAME_ATTR_RE = re.compile(r'name="([^"]*)"', flags=re.IGNORECASE)
+_PROP_ATTR_RE = re.compile(r'property="([^"]*)"', flags=re.IGNORECASE)
+_CONTENT_ATTR_RE = re.compile(r'content="([^"]*)"', flags=re.IGNORECASE)
+# Flight numbers live in prose like "... - Speed: 11 - Glide: 5 - Turn: -1 - Fade: 3."
+_FLIGHT_RES = {
+    key: re.compile(rf"{key}\s*:\s*(-?\d+)", flags=re.IGNORECASE)
+    for key in ("Speed", "Glide", "Turn", "Fade")
+}
+
 
 @dataclass
 class ScannedProduct:
@@ -34,6 +45,12 @@ class ScannedProduct:
     description: str | None
     manufacturer: str | None
     product_url: str
+    disc_type: str | None = None
+    image_url: str | None = None
+    speed: int | None = None
+    glide: int | None = None
+    turn: int | None = None
+    fade: int | None = None
 
 
 # --- robots.txt ------------------------------------------------------------
@@ -108,8 +125,63 @@ def _brand_name(entry: dict) -> str | None:
     return None
 
 
+def parse_flight_numbers(text: str | None) -> dict[str, int | None]:
+    """Pull Speed/Glide/Turn/Fade integers out of prose; missing -> None."""
+    result: dict[str, int | None] = {}
+    for label, regex in _FLIGHT_RES.items():
+        match = regex.search(text or "")
+        result[label.lower()] = int(match.group(1)) if match else None
+    return result
+
+
+def extract_meta_description(html: str) -> str | None:
+    """Page description from <meta name="description">, falling back to og:description."""
+    description: str | None = None
+    og_description: str | None = None
+    for attrs in _META_RE.findall(html):
+        content = _CONTENT_ATTR_RE.search(attrs)
+        if not content:
+            continue
+        name = _NAME_ATTR_RE.search(attrs)
+        prop = _PROP_ATTR_RE.search(attrs)
+        if name and name.group(1).lower() == "description" and description is None:
+            description = content.group(1)
+        elif prop and prop.group(1).lower() == "og:description" and og_description is None:
+            og_description = content.group(1)
+    chosen = description or og_description
+    return html_unescape(chosen) if chosen else None
+
+
+def _disc_type_from_category(value: Any) -> str | None:
+    """Last segment of a JSON-LD category, e.g. 'Discs > Distance Driver' -> 'Distance Driver'."""
+    if not isinstance(value, str):
+        return None
+    parts = [part.strip() for part in html_unescape(value).split(">") if part.strip()]
+    return parts[-1] if parts else None
+
+
+def _first_image_url(image: Any) -> str | None:
+    """First URL from a JSON-LD image (string, ImageObject dict, or list of either)."""
+    if isinstance(image, str):
+        return image
+    if isinstance(image, dict):
+        return image.get("url")
+    if isinstance(image, list):
+        for item in image:
+            url = _first_image_url(item)
+            if url:
+                return url
+    return None
+
+
 def extract_products_from_html(html: str, base_url: str) -> list[ScannedProduct]:
-    """Extract all schema.org Product entries from a page's JSON-LD."""
+    """Extract schema.org Product entries from a page, enriched with page metadata.
+
+    Flight numbers and a prose description come from the page-level meta
+    description; disc type and image come from the Product JSON-LD.
+    """
+    meta_description = extract_meta_description(html)
+    flight = parse_flight_numbers(meta_description)
     products: list[ScannedProduct] = []
     seen: set[tuple[str, str | None]] = set()
     for obj in _iter_jsonld_objects(html):
@@ -123,12 +195,19 @@ def extract_products_from_html(html: str, base_url: str) -> list[ScannedProduct]
                 continue
             seen.add(key)
             raw_url = entry.get("url") or base_url
+            image_url = _first_image_url(entry.get("image"))
             products.append(
                 ScannedProduct(
                     name=name,
-                    description=entry.get("description"),
+                    description=entry.get("description") or meta_description,
                     manufacturer=manufacturer,
                     product_url=urljoin(base_url, raw_url),
+                    disc_type=_disc_type_from_category(entry.get("category")),
+                    image_url=urljoin(base_url, image_url) if image_url else None,
+                    speed=flight["speed"],
+                    glide=flight["glide"],
+                    turn=flight["turn"],
+                    fade=flight["fade"],
                 )
             )
     return products

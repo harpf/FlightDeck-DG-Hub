@@ -41,6 +41,7 @@ class Product(db.Model):
     category = db.Column(db.String(120), nullable=False)
     description = db.Column(db.Text)
     product_url = db.Column(db.String(500))
+    image_url = db.Column(db.String(500))
     disc_type = db.Column(db.String(80))
     speed = db.Column(db.Integer)
     glide = db.Column(db.Integer)
