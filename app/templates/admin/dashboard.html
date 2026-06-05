@@ -63,6 +63,32 @@
   </div>
 </div>
 
+<div class="card mb-4">
+  <div class="card-body">
+    <h2 class="h5"><i class="bi bi-people"></i> Registrierte Benutzer <span class="text-muted fs-6">({{ users|length }})</span></h2>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>Benutzername</th><th>E-Mail</th><th>Rolle</th><th>Registriert</th><th class="text-end">Bewertungen</th></tr></thead>
+        <tbody>
+        {% for u in users %}
+          <tr>
+            <td><i class="bi bi-person-circle"></i> {{ u.username }}</td>
+            <td class="text-muted">{{ u.email }}</td>
+            <td>
+              {% if u.is_admin %}<span class="badge text-bg-success">Admin</span>{% else %}<span class="badge text-bg-secondary">User</span>{% endif %}
+            </td>
+            <td class="text-muted small">{{ u.created_at.strftime('%d.%m.%Y') }}</td>
+            <td class="text-end">{{ u.reviews|length }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="text-muted">Keine Benutzer.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div class="card">
   <div class="card-body">
     <h2 class="h5"><i class="bi bi-link-45deg"></i> Source-Anfragen</h2>

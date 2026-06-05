@@ -4,6 +4,13 @@ A read-only RESTful Web-API for selected application data (disc/products,
 reviews, source requests). It is consumable with any HTTP client (curl, HTTPie,
 Postman) **without a browser**.
 
+## Interactive documentation (Swagger UI)
+
+- **Swagger UI:** `GET /api/docs` — browse and "Try it out" against the live API
+  (click *Authorize* and paste an `<id>.<secret>` token).
+- **OpenAPI spec:** `GET /api/openapi.json` — the machine-readable OpenAPI 3.0
+  document (also importable into Postman/Insomnia).
+
 ## Authentication
 
 The API uses a **static API token**. An admin creates a token in the web UI

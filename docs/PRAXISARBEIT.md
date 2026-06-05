@@ -74,7 +74,7 @@ aber noch nicht aktiviert (siehe Kapitel 7).
 - **User (registriert):** zusätzlich Produkte anlegen, Produkte bewerten,
   Source-Anfragen senden.
 - **Admin:** zusätzlich Source-Anfragen moderieren (freigeben/ablehnen), Quellen
-  scannen, API-Tokens verwalten.
+  scannen, API-Tokens verwalten sowie **alle registrierten Benutzer einsehen**.
 
 **Typische Abläufe**
 
@@ -104,6 +104,8 @@ im Dashboard erstellt). Kein Browser/Session nötig.
 | `GET` | `/api/v1/products` | Token | Produktliste (`?q=`, `?category=`) |
 | `GET` | `/api/v1/products/<id>` | Token | Einzelprodukt inkl. Reviews |
 | `GET` | `/api/v1/full` | Token | Vollexport (Produkte + Reviews + Source-Requests) |
+| `GET` | `/api/docs` | – | Interaktive Swagger-UI (Browser) |
+| `GET` | `/api/openapi.json` | – | OpenAPI-3.0-Spezifikation (maschinenlesbar) |
 
 Beispiele (bei self-signed Zertifikat `curl -k` verwenden):
 

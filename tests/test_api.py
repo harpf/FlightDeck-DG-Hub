@@ -58,6 +58,21 @@ def test_full_dump_with_token(client, product, api_token):
     assert "products" in data and "source_requests" in data
 
 
+def test_openapi_spec_served(client):
+    resp = client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["openapi"].startswith("3.")
+    assert "/api/v1/products" in data["paths"]
+    assert "ApiTokenAuth" in data["components"]["securitySchemes"]
+
+
+def test_swagger_ui_page(client):
+    resp = client.get("/api/docs")
+    assert resp.status_code == 200
+    assert b"swagger-ui" in resp.data
+
+
 def test_deactivated_token_is_rejected(client, product, api_token, db):
     from app.models import ApiToken
 

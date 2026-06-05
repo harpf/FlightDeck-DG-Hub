@@ -59,6 +59,20 @@ def test_login_fails_with_wrong_password(client, user):
     assert "Ungültige Zugangsdaten".encode() in resp.data
 
 
+def test_admin_dashboard_lists_users(client, admin, user):
+    client.post("/auth/login", data={"username": "admin", "password": "adminpass123"})
+    resp = client.get("/admin/")
+    assert resp.status_code == 200
+    assert b"Registrierte Benutzer" in resp.data
+    assert b"tester@example.com" in resp.data  # the `user` fixture's email
+
+
+def test_admin_dashboard_forbidden_for_normal_user(client, user):
+    client.post("/auth/login", data={"username": "tester", "password": "password123"})
+    resp = client.get("/admin/")
+    assert resp.status_code == 403
+
+
 def test_create_product_requires_login(client):
     resp = client.get("/products/new")
     # Flask-Login redirects anonymous users to the login page

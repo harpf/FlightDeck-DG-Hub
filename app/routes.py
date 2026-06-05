@@ -7,6 +7,7 @@ from flask_login import current_user, login_required, login_user, logout_user
 from app.extensions import db
 from app.forms import ApiTokenForm, LoginForm, ProductForm, ProductReviewForm, RegisterForm, SourceRequestForm, SourceRequestStatusForm
 from app.models import ApiToken, Product, ProductReview, SourceRequest, User
+from app.openapi import build_openapi_spec
 from app.scanner import is_scraping_allowed, scan_products_from_url
 
 main_bp = Blueprint("main", __name__)
@@ -162,7 +163,8 @@ def request_source():
 def dashboard():
     source_requests = SourceRequest.query.order_by(SourceRequest.created_at.desc()).all()
     tokens = ApiToken.query.order_by(ApiToken.created_at.desc()).all()
-    return render_template("admin/dashboard.html", source_requests=source_requests, tokens=tokens, token_form=ApiTokenForm(), status_form=SourceRequestStatusForm())
+    users = User.query.order_by(User.created_at.desc()).all()
+    return render_template("admin/dashboard.html", source_requests=source_requests, tokens=tokens, users=users, token_form=ApiTokenForm(), status_form=SourceRequestStatusForm())
 
 
 @admin_bp.route('/tokens/create', methods=['POST'])
@@ -279,6 +281,18 @@ def _serialize_source_request(source_request: SourceRequest) -> dict:
 
 
 # --- API endpoints ---------------------------------------------------------
+
+@api_bp.route("/openapi.json")
+def openapi_spec():
+    """OpenAPI 3.0 specification powering the embedded Swagger UI."""
+    return jsonify(build_openapi_spec())
+
+
+@api_bp.route("/docs")
+def api_docs():
+    """Interactive Swagger UI for the REST API."""
+    return render_template("api_docs.html")
+
 
 @api_bp.route("/v1/health")
 def api_health():

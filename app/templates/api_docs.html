@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}API-Dokumentation · FlightDeck DG Hub{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css">
+{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-2"><i class="bi bi-braces"></i> API-Dokumentation</h1>
+<p class="text-muted">
+  Interaktive Swagger-UI für das REST-API. Erstelle im
+  {% if current_user.is_authenticated and current_user.is_admin %}<a href="{{ url_for('admin.dashboard') }}">Admin-Bereich</a>{% else %}Admin-Bereich{% endif %}
+  einen API-Token, klicke <strong>„Authorize"</strong> und teste die Endpunkte direkt.
+</p>
+
+<div id="swagger-ui"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+<script>
+  window.addEventListener('load', function () {
+    window.ui = SwaggerUIBundle({
+      url: "{{ url_for('api.openapi_spec') }}",
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      defaultModelsExpandDepth: 0
+    });
+  });
+</script>
+{% endblock %}
