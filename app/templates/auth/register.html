@@ -1,11 +1,27 @@
 {% extends 'base.html' %}
+{% from '_macros.html' import field %}
+{% block title %}Registrieren · FlightDeck DG Hub{% endblock %}
 {% block content %}
-<h1>Registrierung</h1>
-<form method="post" class="col-12 col-md-8 col-lg-6">{{ form.hidden_tag() }}
-{{ form.username.label }} {{ form.username(class='form-control mb-2') }}
-{{ form.email.label }} {{ form.email(class='form-control mb-2') }}
-{{ form.password.label }} {{ form.password(class='form-control mb-2') }}
-<div class="form-check mb-2">{{ form.privacy_consent(class='form-check-input') }} {{ form.privacy_consent.label(class='form-check-label') }}</div>
-{{ form.submit(class='btn btn-success') }}
-</form>
+<div class="auth-card">
+  <div class="card">
+    <div class="card-body">
+      <h1 class="h3 mb-3"><i class="bi bi-person-plus"></i> Konto erstellen</h1>
+      <form method="post" novalidate>{{ form.hidden_tag() }}
+        {{ field(form.username, help='Eindeutiger, öffentlich sichtbarer Name.') }}
+        {{ field(form.email) }}
+        {{ field(form.password, help='Mindestens 10 Zeichen.') }}
+        <div class="form-check mb-3">
+          {{ form.privacy_consent(class='form-check-input' + (' is-invalid' if form.privacy_consent.errors else '')) }}
+          {{ form.privacy_consent.label(class='form-check-label') }}
+          <a href="{{ url_for('main.privacy') }}" target="_blank">(lesen)</a>
+          {% for e in form.privacy_consent.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="d-grid">{{ form.submit(class='btn btn-success') }}</div>
+      </form>
+    </div>
+  </div>
+  <p class="text-center text-muted mt-3 small">
+    Bereits registriert? <a href="{{ url_for('auth.login') }}">Anmelden</a>
+  </p>
+</div>
 {% endblock %}

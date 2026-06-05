@@ -1,2 +1,10 @@
 {% extends 'base.html' %}
-{% block content %}<h1>500 - Interner Serverfehler</h1>{% endblock %}
+{% block title %}500 · FlightDeck DG Hub{% endblock %}
+{% block content %}
+<div class="text-center py-5">
+  <div class="display-1"><i class="bi bi-exclamation-triangle text-warning"></i></div>
+  <h1 class="h3">500 – Interner Serverfehler</h1>
+  <p class="text-muted">Etwas ist schiefgelaufen. Bitte versuche es später erneut.</p>
+  <a href="{{ url_for('main.home') }}" class="btn btn-success"><i class="bi bi-house"></i> Zur Startseite</a>
+</div>
+{% endblock %}

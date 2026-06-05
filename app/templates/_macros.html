@@ -1,0 +1,40 @@
+{# Reusable UI macros (imported with `{% from '_macros.html' import ... %}`). #}
+
+{# Star rating display (1–5) using Bootstrap Icons. #}
+{% macro stars(rating) %}
+<span class="rating-stars" title="{{ rating }}/5">
+  {%- for i in range(1, 6) -%}
+    <i class="bi {{ 'bi-star-fill' if i <= rating else 'bi-star' }}"></i>
+  {%- endfor -%}
+</span>
+{% endmacro %}
+
+{# Average rating + count for a list of reviews. #}
+{% macro avg_rating(reviews) %}
+  {%- if reviews and reviews|length > 0 -%}
+    {%- set total = reviews|sum(attribute='rating') -%}
+    {%- set avg = (total / reviews|length) -%}
+    {{ stars(avg|round(0, 'common')|int) }}
+    <span class="text-muted small ms-1">{{ '%.1f'|format(avg) }} ({{ reviews|length }})</span>
+  {%- else -%}
+    <span class="text-muted small"><i class="bi bi-star"></i> Noch keine Bewertung</span>
+  {%- endif -%}
+{% endmacro %}
+
+{# One flight-number stat box (Speed/Glide/Turn/Fade). #}
+{% macro flight_stat(label, value) %}
+<div class="flight-stat">
+  <div class="val">{{ value if value is not none else '–' }}</div>
+  <div class="lbl">{{ label }}</div>
+</div>
+{% endmacro %}
+
+{# Full form field with label, help text and validation errors. #}
+{% macro field(f, cls='form-control', help='') %}
+<div class="mb-3">
+  {{ f.label(class='form-label') }}
+  {{ f(class=cls ~ (' is-invalid' if f.errors else '')) }}
+  {% if help %}<div class="form-text">{{ help }}</div>{% endif %}
+  {% for e in f.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+</div>
+{% endmacro %}

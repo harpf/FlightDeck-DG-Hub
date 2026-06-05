@@ -1,7 +1,79 @@
-:root{--dg-green:#2d6a4f;--dg-lime:#95d5b2;--dg-dark:#1b4332;--dg-sand:#f1faee}
-body{background:linear-gradient(180deg,var(--dg-sand),#fff);min-height:100vh}
-.navbar{background:linear-gradient(90deg,var(--dg-dark),var(--dg-green))!important}
-.hero{background:radial-gradient(circle at top right,var(--dg-lime),#fff);border-radius:1rem;padding:1rem}
+:root{
+  --dg-green:#2d6a4f;
+  --dg-lime:#95d5b2;
+  --dg-dark:#1b4332;
+  --dg-sand:#f1faee;
+  --dg-amber:#f4a261;
+}
+
+body{
+  background:linear-gradient(180deg,var(--dg-sand),#fff);
+  min-height:100vh;
+  color:#1d2b27;
+}
+
+/* ---------- Navigation ---------- */
+.navbar{background:linear-gradient(90deg,var(--dg-dark),var(--dg-green))!important;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.navbar .nav-link{border-radius:.4rem;padding-inline:.7rem}
+.navbar .nav-link.active{background:rgba(255,255,255,.18);font-weight:600}
+.navbar .nav-link:hover{background:rgba(255,255,255,.10)}
+
+/* ---------- Hero ---------- */
+.hero{
+  background:radial-gradient(circle at top right,var(--dg-lime),#fff);
+  border-radius:1rem;
+  padding:2rem;
+  border:1px solid rgba(45,106,79,.15);
+}
+.hero h1{color:var(--dg-dark);font-weight:700}
+
+/* ---------- Breadcrumb ---------- */
+.breadcrumb-bar{background:rgba(45,106,79,.06);border-bottom:1px solid rgba(45,106,79,.12)}
+.breadcrumb{margin:0;padding:.6rem 0}
+.breadcrumb a{color:var(--dg-green);text-decoration:none}
+.breadcrumb a:hover{text-decoration:underline}
+
+/* ---------- Cards ---------- */
+.card{border:1px solid rgba(45,106,79,.12);border-radius:.8rem}
 .product-card{transition:.2s transform,.2s box-shadow}
-.product-card:hover{transform:translateY(-3px);box-shadow:0 .5rem 1rem rgba(0,0,0,.15)}
-@media (max-width: 768px){.hero h1{font-size:1.4rem}}
+.product-card:hover{transform:translateY(-3px);box-shadow:0 .6rem 1.2rem rgba(0,0,0,.14)}
+.product-card .card-title a{color:var(--dg-dark);text-decoration:none}
+.product-card .card-title a:hover{color:var(--dg-green);text-decoration:underline}
+
+/* ---------- Flight number stat boxes ---------- */
+.flight-stats{display:flex;gap:.5rem;flex-wrap:wrap}
+.flight-stat{
+  text-align:center;min-width:62px;
+  border-radius:.6rem;padding:.45rem .55rem;
+  background:var(--dg-lime);color:var(--dg-dark);
+  border:1px solid rgba(27,67,50,.15);
+}
+.flight-stat .val{font-size:1.35rem;font-weight:700;line-height:1.1}
+.flight-stat .lbl{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;opacity:.85}
+.flight-stats-sm .flight-stat{min-width:46px;padding:.25rem .35rem}
+.flight-stats-sm .flight-stat .val{font-size:1rem}
+.flight-stats-sm .flight-stat .lbl{font-size:.55rem}
+
+/* ---------- Rating stars ---------- */
+.rating-stars .bi{color:var(--dg-amber)}
+
+/* ---------- Spec list ---------- */
+.spec-list dt{color:#5a6b65;font-weight:600;font-size:.85rem}
+.spec-list dd{margin-bottom:.6rem}
+
+/* ---------- Category badge ---------- */
+.badge-category{background:var(--dg-green);color:#fff}
+
+/* ---------- Footer ---------- */
+.site-footer{background:#fff;border-top:1px solid rgba(45,106,79,.15)}
+.site-footer a{color:var(--dg-green);text-decoration:none}
+.site-footer a:hover{text-decoration:underline}
+
+/* ---------- Forms ---------- */
+.form-label{font-weight:600;font-size:.9rem;margin-bottom:.25rem}
+fieldset.field-group{border:1px solid rgba(45,106,79,.18);border-radius:.7rem;padding:1rem;margin-bottom:1rem}
+fieldset.field-group legend{font-size:.95rem;font-weight:700;color:var(--dg-dark);width:auto;padding:0 .5rem}
+
+/* ---------- Misc ---------- */
+.auth-card{max-width:440px;margin:0 auto}
+@media (max-width: 768px){.hero{padding:1.25rem}.hero h1{font-size:1.5rem}}

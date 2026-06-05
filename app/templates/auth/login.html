@@ -1,9 +1,20 @@
 {% extends 'base.html' %}
+{% from '_macros.html' import field %}
+{% block title %}Login · FlightDeck DG Hub{% endblock %}
 {% block content %}
-<h1>Login</h1>
-<form method="post">{{ form.hidden_tag() }}
-{{ form.username.label }} {{ form.username(class='form-control mb-2') }}
-{{ form.password.label }} {{ form.password(class='form-control mb-2') }}
-{{ form.submit(class='btn btn-primary') }}
-</form>
+<div class="auth-card">
+  <div class="card">
+    <div class="card-body">
+      <h1 class="h3 mb-3"><i class="bi bi-box-arrow-in-right"></i> Anmelden</h1>
+      <form method="post" novalidate>{{ form.hidden_tag() }}
+        {{ field(form.username) }}
+        {{ field(form.password) }}
+        <div class="d-grid">{{ form.submit(class='btn btn-success') }}</div>
+      </form>
+    </div>
+  </div>
+  <p class="text-center text-muted mt-3 small">
+    Noch kein Konto? <a href="{{ url_for('auth.register') }}">Jetzt registrieren</a>
+  </p>
+</div>
 {% endblock %}

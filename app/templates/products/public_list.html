@@ -1,12 +1,81 @@
 {% extends 'base.html' %}
+{% from '_macros.html' import flight_stat, avg_rating %}
+{% block title %}Discs entdecken · FlightDeck DG Hub{% endblock %}
 {% block content %}
-<div class="hero mb-3"><h1>DiscGolf Produkt-Wiki</h1><p class="mb-0">Mobil, Tablet & Desktop optimiert.</p></div>
-<form method="get" class="row g-2 mb-3">
-  <div class="col-12 col-md-6"><input name="q" value="{{ q }}" class="form-control" placeholder="Suchen..."></div>
-  <div class="col-8 col-md-3"><select name="category" class="form-select"><option value="">Alle Kategorien</option>{% for c in categories %}<option value="{{ c }}" {% if c==category %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
-  <div class="col-4 col-md-3"><button class="btn btn-success w-100">Filtern</button></div>
+
+<div class="hero mb-4">
+  <h1 class="mb-2">🥏 Disc-Golf Produkt-Wiki</h1>
+  <p class="lead mb-3">Entdecke, vergleiche und bewerte Discs, Bags und Körbe – von der Community gepflegt.</p>
+  {% if not current_user.is_authenticated %}
+  <a class="btn btn-success" href="{{ url_for('auth.register') }}"><i class="bi bi-person-plus"></i> Mitmachen</a>
+  <a class="btn btn-outline-success" href="{{ url_for('auth.login') }}">Anmelden</a>
+  {% else %}
+  <a class="btn btn-success" href="{{ url_for('products.create_product') }}"><i class="bi bi-plus-lg"></i> Disc hinzufügen</a>
+  {% endif %}
+</div>
+
+<form method="get" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-12 col-md-6">
+      <label class="form-label mb-1"><i class="bi bi-search"></i> Suche</label>
+      <input name="q" value="{{ q }}" class="form-control" placeholder="Name oder Hersteller …">
+    </div>
+    <div class="col-8 col-md-4">
+      <label class="form-label mb-1">Kategorie</label>
+      <select name="category" class="form-select">
+        <option value="">Alle Kategorien</option>
+        {% for c in categories %}<option value="{{ c }}" {% if c==category %}selected{% endif %}>{{ c }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-4 col-md-2">
+      <button class="btn btn-success w-100"><i class="bi bi-funnel"></i> Filtern</button>
+    </div>
+  </div>
 </form>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <span class="text-muted small">
+    <strong>{{ products|length }}</strong> {{ 'Eintrag' if products|length == 1 else 'Einträge' }}
+    {% if q %}für „{{ q }}"{% endif %}{% if category %} in {{ category }}{% endif %}
+  </span>
+  {% if q or category %}<a href="{{ url_for('main.home') }}" class="small"><i class="bi bi-x-circle"></i> Filter zurücksetzen</a>{% endif %}
+</div>
+
 <div class="row g-3">
-{% for p in products %}<div class="col-12 col-sm-6 col-lg-4"><div class="card product-card h-100"><div class="card-body"><h5><a href="{{ url_for('products.product_detail', product_id=p.id) }}">{{ p.name }}</a></h5><p class="text-muted mb-0">{{ p.manufacturer }} · {{ p.category }}</p></div></div></div>{% else %}<p>Keine Produkte gefunden.</p>{% endfor %}
+{% for p in products %}
+  <div class="col-12 col-sm-6 col-lg-4">
+    <div class="card product-card h-100">
+      <div class="card-body d-flex flex-column">
+        <div class="d-flex justify-content-between align-items-start mb-1">
+          <h5 class="card-title mb-0"><a href="{{ url_for('products.product_detail', product_id=p.id) }}">{{ p.name }}</a></h5>
+          <span class="badge badge-category ms-2">{{ p.category }}</span>
+        </div>
+        <p class="text-muted small mb-2">
+          {% if p.manufacturer %}<i class="bi bi-building"></i> {{ p.manufacturer }}{% endif %}
+          {% if p.disc_type %} · {{ p.disc_type }}{% endif %}
+        </p>
+
+        {% if p.speed is not none or p.glide is not none or p.turn is not none or p.fade is not none %}
+        <div class="flight-stats flight-stats-sm mb-2">
+          {{ flight_stat('Speed', p.speed) }}{{ flight_stat('Glide', p.glide) }}{{ flight_stat('Turn', p.turn) }}{{ flight_stat('Fade', p.fade) }}
+        </div>
+        {% endif %}
+
+        <div class="mt-auto pt-2 d-flex justify-content-between align-items-center">
+          <span>{{ avg_rating(p.reviews) }}</span>
+          <a href="{{ url_for('products.product_detail', product_id=p.id) }}" class="btn btn-sm btn-outline-success">Details <i class="bi bi-arrow-right"></i></a>
+        </div>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div class="col-12">
+    <div class="card card-body text-center text-muted py-5">
+      <div class="mb-2"><i class="bi bi-inbox" style="font-size:2rem"></i></div>
+      Keine Produkte gefunden.
+      {% if q or category %}<div><a href="{{ url_for('main.home') }}">Filter zurücksetzen</a></div>{% endif %}
+    </div>
+  </div>
+{% endfor %}
 </div>
 {% endblock %}

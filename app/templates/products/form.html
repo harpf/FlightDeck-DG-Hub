@@ -1,23 +1,59 @@
 {% extends 'base.html' %}
-{% block content %}
-<h1>{{ title }}</h1>
-<form method="post">{{ form.hidden_tag() }}
-<div class="row g-2">
-<div class="col-12 col-md-6">{{ form.name.label }} {{ form.name(class='form-control') }}</div>
-<div class="col-12 col-md-6">{{ form.manufacturer.label }} {{ form.manufacturer(class='form-control') }}</div>
-<div class="col-12 col-md-4">{{ form.category.label }} {{ form.category(class='form-select') }}</div>
-<div class="col-12 col-md-4">{{ form.disc_type.label }} {{ form.disc_type(class='form-control') }}</div>
-<div class="col-12 col-md-4">{{ form.plastic_type.label }} {{ form.plastic_type(class='form-control') }}</div>
-<div class="col-6 col-md-3">{{ form.speed.label }} {{ form.speed(class='form-control') }}</div>
-<div class="col-6 col-md-3">{{ form.glide.label }} {{ form.glide(class='form-control') }}</div>
-<div class="col-6 col-md-3">{{ form.turn.label }} {{ form.turn(class='form-control') }}</div>
-<div class="col-6 col-md-3">{{ form.fade.label }} {{ form.fade(class='form-control') }}</div>
-<div class="col-6">{{ form.diameter_cm.label }} {{ form.diameter_cm(class='form-control') }}</div>
-<div class="col-6">{{ form.weight_range_g.label }} {{ form.weight_range_g(class='form-control') }}</div>
-<div class="col-12">{{ form.stability.label }} {{ form.stability(class='form-control') }}</div>
-<div class="col-12">{{ form.product_url.label }} {{ form.product_url(class='form-control') }}</div>
-<div class="col-12">{{ form.description.label }} {{ form.description(class='form-control') }}</div>
+{% from '_macros.html' import field %}
+{% block title %}{{ title }} · FlightDeck DG Hub{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumb-bar">
+  <nav class="container" aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('main.home') }}">Discs</a></li>
+      <li class="breadcrumb-item active" aria-current="page">{{ title }}</li>
+    </ol>
+  </nav>
 </div>
-{{ form.submit(class='btn btn-success mt-3') }}
+{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3"><i class="bi bi-plus-circle"></i> {{ title }}</h1>
+
+<form method="post" novalidate>{{ form.hidden_tag() }}
+
+  <fieldset class="field-group">
+    <legend>Allgemein</legend>
+    <div class="row">
+      <div class="col-12 col-md-6">{{ field(form.name) }}</div>
+      <div class="col-12 col-md-6">{{ field(form.manufacturer) }}</div>
+      <div class="col-12 col-md-4">{{ field(form.category, cls='form-select') }}</div>
+      <div class="col-12 col-md-4">{{ field(form.disc_type, help='z. B. Distance Driver, Putter') }}</div>
+      <div class="col-12 col-md-4">{{ field(form.plastic_type) }}</div>
+    </div>
+  </fieldset>
+
+  <fieldset class="field-group">
+    <legend>Flugwerte</legend>
+    <p class="text-muted small mb-3">Die vier Standard-Flugzahlen einer Disc.</p>
+    <div class="row">
+      <div class="col-6 col-md-3">{{ field(form.speed, help='1–15') }}</div>
+      <div class="col-6 col-md-3">{{ field(form.glide, help='1–8') }}</div>
+      <div class="col-6 col-md-3">{{ field(form.turn, help='-6 bis 2') }}</div>
+      <div class="col-6 col-md-3">{{ field(form.fade, help='0–6') }}</div>
+      <div class="col-12">{{ field(form.stability, help='z. B. overstable, stable, understable') }}</div>
+    </div>
+  </fieldset>
+
+  <fieldset class="field-group">
+    <legend>Details</legend>
+    <div class="row">
+      <div class="col-6">{{ field(form.diameter_cm, help='in cm') }}</div>
+      <div class="col-6">{{ field(form.weight_range_g, help='z. B. 170-175 g') }}</div>
+      <div class="col-12">{{ field(form.product_url, help='Link zur Hersteller-/Shop-Seite') }}</div>
+      <div class="col-12">{{ field(form.description, help='Freitext-Beschreibung') }}</div>
+    </div>
+  </fieldset>
+
+  <div class="d-flex gap-2">
+    {{ form.submit(class='btn btn-success') }}
+    <a href="{{ url_for('main.home') }}" class="btn btn-outline-secondary">Abbrechen</a>
+  </div>
 </form>
 {% endblock %}
