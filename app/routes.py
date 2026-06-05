@@ -397,7 +397,33 @@ _PRODUCT_WRITABLE_FIELDS = (
     "speed", "glide", "turn", "fade", "diameter_cm", "weight_range_g",
     "plastic_type", "stability",
 )
+_PRODUCT_INT_FIELDS = ("speed", "glide", "turn", "fade")
+_PRODUCT_FLOAT_FIELDS = ("diameter_cm",)
 _VALID_SOURCE_STATUSES = ("open", "approved", "rejected")
+
+
+def _assign_product_fields(product, data):
+    """Apply writable fields from JSON with type coercion; return an error response or None.
+
+    Coercing numeric fields keeps non-numeric strings (an XSS vector once flight
+    numbers reach the inline-SVG chart) out of the database.
+    """
+    for field in _PRODUCT_WRITABLE_FIELDS:
+        if field not in data:
+            continue
+        value = data[field]
+        if value is not None and field in _PRODUCT_INT_FIELDS:
+            try:
+                value = int(value)
+            except (TypeError, ValueError):
+                return jsonify({"error": f"Field '{field}' must be an integer"}), 400
+        elif value is not None and field in _PRODUCT_FLOAT_FIELDS:
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                return jsonify({"error": f"Field '{field}' must be a number"}), 400
+        setattr(product, field, value)
+    return None
 
 
 @api_bp.route("/v1/products", methods=["POST"])
@@ -409,9 +435,9 @@ def api_create_product():
     if not name:
         return jsonify({"error": "Field 'name' is required"}), 400
     product = Product(name=name, category=(data.get("category") or "Disc"))
-    for field in _PRODUCT_WRITABLE_FIELDS:
-        if field in data:
-            setattr(product, field, data[field])
+    error = _assign_product_fields(product, data)
+    if error:
+        return error
     db.session.add(product)
     db.session.commit()
     return jsonify(_serialize_product(product)), 201
@@ -432,9 +458,9 @@ def api_update_product(product_id: int):
         product.name = name
     if data.get("category"):
         product.category = data["category"]
-    for field in _PRODUCT_WRITABLE_FIELDS:
-        if field in data:
-            setattr(product, field, data[field])
+    error = _assign_product_fields(product, data)
+    if error:
+        return error
     db.session.commit()
     return jsonify(_serialize_product(product)), 200
 

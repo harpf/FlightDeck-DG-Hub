@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 
-from markupsafe import Markup
+from markupsafe import Markup, escape
 
 WIDTH = 240
 HEIGHT = 300
@@ -74,7 +74,9 @@ def render_flight_svg(
     center = width / 2
     start_x, start_y = points[0]
     end_x, end_y = points[-1]
-    caption = f"S {_fmt(speed)} · G {_fmt(glide)} · T {_fmt(turn)} · F {_fmt(fade)}"
+    # Escape the caption defensively: values should already be ints, but never emit
+    # unescaped data into this raw-Markup SVG (text node + aria-label attribute).
+    caption = escape(f"S {_fmt(speed)} · G {_fmt(glide)} · T {_fmt(turn)} · F {_fmt(fade)}")
 
     svg = (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '

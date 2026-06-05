@@ -44,3 +44,10 @@ def test_render_flight_svg_returns_markup_with_numbers():
     assert text.startswith("<svg")
     assert "</svg>" in text
     assert "polyline" in text or "path" in text
+
+
+def test_render_flight_svg_escapes_caption_values():
+    # Defense in depth: even a string value must not break out of the SVG text/attr.
+    svg = str(render_flight_svg("</text><script>alert(1)</script>", 5, -1, 3))
+    assert "<script>" not in svg
+    assert "&lt;/text&gt;" in svg or "&lt;script&gt;" in svg

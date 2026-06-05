@@ -43,6 +43,23 @@ def test_create_product_requires_name(client, admin_api_token):
     assert resp.status_code == 400
 
 
+def test_create_product_rejects_non_numeric_flight_value(client, admin_api_token):
+    # Guards the flight-chart SVG sink: a string in speed must never be stored.
+    payload = {"name": "Pwn", "speed": "</text></svg><img src=x onerror=alert(1)>"}
+    resp = client.post("/api/v1/products", json=payload, headers=_h(admin_api_token))
+    assert resp.status_code == 400
+    assert Product.query.count() == 0
+
+
+def test_update_product_rejects_non_numeric_flight_value(client, admin_api_token, product):
+    resp = client.patch(
+        f"/api/v1/products/{product.id}",
+        json={"turn": "not-a-number"},
+        headers=_h(admin_api_token),
+    )
+    assert resp.status_code == 400
+
+
 def test_update_product(client, admin_api_token, product):
     resp = client.patch(
         f"/api/v1/products/{product.id}",
