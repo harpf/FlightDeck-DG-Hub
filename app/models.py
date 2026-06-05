@@ -85,6 +85,8 @@ class ApiToken(db.Model):
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
     last_used_at = db.Column(db.DateTime)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    # Admin-scoped tokens may perform write operations via the API; read tokens cannot.
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_by = db.relationship("User", back_populates="api_tokens")
 

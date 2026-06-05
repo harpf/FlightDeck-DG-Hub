@@ -1,5 +1,5 @@
 """Tests for the admin source-scan endpoint feedback and error handling."""
-from app.models import Product, SourceRequest
+from app.models import ApiToken, Product, SourceRequest
 from app.scanner import ScannedProduct
 
 
@@ -59,6 +59,20 @@ def test_scan_handles_fetch_error_without_500(client, db, admin, monkeypatch):
     resp = client.post(f"/admin/sources/{src.id}/scan", follow_redirects=True)
     assert resp.status_code == 200
     assert "fehlgeschlagen".encode() in resp.data
+
+
+def test_admin_can_create_admin_scoped_token(client, db, admin):
+    _login_admin(client)
+    client.post("/admin/tokens/create", data={"name": "ci-bot", "is_admin": "y"}, follow_redirects=True)
+    token = ApiToken.query.filter_by(name="ci-bot").one()
+    assert token.is_admin is True
+
+
+def test_created_token_defaults_to_read_only(client, db, admin):
+    _login_admin(client)
+    client.post("/admin/tokens/create", data={"name": "reader"}, follow_redirects=True)
+    token = ApiToken.query.filter_by(name="reader").one()
+    assert token.is_admin is False
 
 
 def test_scan_persists_disc_data_and_image(client, db, admin, monkeypatch):

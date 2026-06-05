@@ -54,4 +54,5 @@ class SourceRequestStatusForm(FlaskForm):
 
 class ApiTokenForm(FlaskForm):
     name = StringField("Token Name", validators=[DataRequired(), Length(max=120)])
+    is_admin = BooleanField("Admin (Schreibrechte)")
     submit = SubmitField("Token erstellen")

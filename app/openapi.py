@@ -52,10 +52,71 @@ def build_openapi_spec() -> dict:
         "type": "object",
         "properties": {"error": {"type": "string", "example": "Invalid API token"}},
     }
+    product_input_schema = {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+            "name": {"type": "string", "example": "Wraith"},
+            "manufacturer": {"type": "string", "nullable": True, "example": "Innova"},
+            "category": {"type": "string", "example": "Disc", "description": "Default: 'Disc'"},
+            "description": {"type": "string", "nullable": True},
+            "product_url": {"type": "string", "nullable": True},
+            "image_url": {"type": "string", "nullable": True},
+            "disc_type": {"type": "string", "nullable": True, "example": "Distance Driver"},
+            "speed": {"type": "integer", "nullable": True, "example": 11},
+            "glide": {"type": "integer", "nullable": True, "example": 5},
+            "turn": {"type": "integer", "nullable": True, "example": -1},
+            "fade": {"type": "integer", "nullable": True, "example": 3},
+            "diameter_cm": {"type": "number", "nullable": True},
+            "weight_range_g": {"type": "string", "nullable": True},
+            "plastic_type": {"type": "string", "nullable": True},
+            "stability": {"type": "string", "nullable": True},
+        },
+    }
+    source_input_schema = {
+        "type": "object",
+        "required": ["source_url"],
+        "properties": {
+            "source_url": {"type": "string", "example": "https://shop.example/kat/discs/"},
+            "note": {"type": "string", "nullable": True},
+            "status": {"type": "string", "enum": ["open", "approved", "rejected"], "example": "open"},
+        },
+    }
+    review_input_schema = {
+        "type": "object",
+        "required": ["rating"],
+        "properties": {
+            "rating": {"type": "integer", "minimum": 1, "maximum": 5, "example": 5},
+            "comment": {"type": "string", "nullable": True},
+        },
+    }
+    scan_result_schema = {
+        "type": "object",
+        "properties": {
+            "found": {"type": "integer", "example": 12},
+            "created": {"type": "integer", "example": 10},
+            "duplicates": {"type": "integer", "example": 2},
+        },
+    }
     unauthorized = {
         "description": "Fehlender oder ungültiger API-Token",
         "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
     }
+    forbidden = {
+        "description": "Token ohne Schreibrechte (Admin-Scope erforderlich)",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
+    }
+    not_found = {
+        "description": "Nicht gefunden",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
+    }
+    admin_security = [{"ApiTokenAuth": []}]
+
+    def _json_body(ref):
+        return {"required": True, "content": {"application/json": {"schema": {"$ref": ref}}}}
+
+    def _product_response(code, desc):
+        return {code: {"description": desc, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Product"}}}}}
 
     return {
         "openapi": "3.0.3",
@@ -74,6 +135,7 @@ def build_openapi_spec() -> dict:
             {"name": "System", "description": "Status & Health"},
             {"name": "Products", "description": "Discs und Produkte"},
             {"name": "Export", "description": "Vollexport"},
+            {"name": "Admin", "description": "Schreibzugriff – erfordert einen Admin-API-Token"},
         ],
         "components": {
             "securitySchemes": {
@@ -88,6 +150,10 @@ def build_openapi_spec() -> dict:
                 "Product": product_schema,
                 "Review": review_schema,
                 "Error": error_schema,
+                "ProductInput": product_input_schema,
+                "SourceInput": source_input_schema,
+                "ReviewInput": review_input_schema,
+                "ScanResult": scan_result_schema,
             },
         },
         "paths": {
@@ -141,7 +207,19 @@ def build_openapi_spec() -> dict:
                         },
                         "401": unauthorized,
                     },
-                }
+                },
+                "post": {
+                    "tags": ["Admin"],
+                    "summary": "Produkt anlegen (Admin-Token)",
+                    "security": admin_security,
+                    "requestBody": _json_body("#/components/schemas/ProductInput"),
+                    "responses": {
+                        "201": _product_response("201", "Produkt erstellt")["201"],
+                        "400": {"description": "Ungültige Eingabe", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                        "401": unauthorized,
+                        "403": forbidden,
+                    },
+                },
             },
             "/api/v1/products/{id}": {
                 "get": {
@@ -157,12 +235,96 @@ def build_openapi_spec() -> dict:
                             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Product"}}},
                         },
                         "401": unauthorized,
-                        "404": {
-                            "description": "Produkt nicht gefunden",
-                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
-                        },
+                        "404": not_found,
                     },
-                }
+                },
+                "patch": {
+                    "tags": ["Admin"],
+                    "summary": "Produkt aktualisieren (Admin-Token)",
+                    "security": admin_security,
+                    "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "integer"}}],
+                    "requestBody": _json_body("#/components/schemas/ProductInput"),
+                    "responses": {
+                        "200": _product_response("200", "Produkt aktualisiert")["200"],
+                        "401": unauthorized,
+                        "403": forbidden,
+                        "404": not_found,
+                    },
+                },
+                "delete": {
+                    "tags": ["Admin"],
+                    "summary": "Produkt löschen (Admin-Token)",
+                    "security": admin_security,
+                    "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "integer"}}],
+                    "responses": {
+                        "204": {"description": "Gelöscht"},
+                        "401": unauthorized,
+                        "403": forbidden,
+                        "404": not_found,
+                    },
+                },
+            },
+            "/api/v1/products/{id}/reviews": {
+                "post": {
+                    "tags": ["Admin"],
+                    "summary": "Bewertung anlegen/aktualisieren (Admin-Token)",
+                    "security": admin_security,
+                    "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "integer"}}],
+                    "requestBody": _json_body("#/components/schemas/ReviewInput"),
+                    "responses": {
+                        "201": {"description": "Bewertung erstellt", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Review"}}}},
+                        "200": {"description": "Bewertung aktualisiert", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Review"}}}},
+                        "400": {"description": "Ungültige Eingabe", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                        "401": unauthorized,
+                        "403": forbidden,
+                        "404": not_found,
+                    },
+                },
+            },
+            "/api/v1/sources": {
+                "post": {
+                    "tags": ["Admin"],
+                    "summary": "Source-Request anlegen (Admin-Token)",
+                    "security": admin_security,
+                    "requestBody": _json_body("#/components/schemas/SourceInput"),
+                    "responses": {
+                        "201": {"description": "Source-Request erstellt", "content": {"application/json": {"schema": {"type": "object"}}}},
+                        "400": {"description": "Ungültige Eingabe", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                        "401": unauthorized,
+                        "403": forbidden,
+                    },
+                },
+            },
+            "/api/v1/sources/{id}": {
+                "patch": {
+                    "tags": ["Admin"],
+                    "summary": "Source-Status ändern (Admin-Token)",
+                    "security": admin_security,
+                    "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "integer"}}],
+                    "requestBody": _json_body("#/components/schemas/SourceInput"),
+                    "responses": {
+                        "200": {"description": "Source aktualisiert", "content": {"application/json": {"schema": {"type": "object"}}}},
+                        "401": unauthorized,
+                        "403": forbidden,
+                        "404": not_found,
+                    },
+                },
+            },
+            "/api/v1/sources/{id}/scan": {
+                "post": {
+                    "tags": ["Admin"],
+                    "summary": "Source scannen und Produkte importieren (Admin-Token)",
+                    "description": "Scannt eine freigegebene Quelle und legt neue Produkte an.",
+                    "security": admin_security,
+                    "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "integer"}}],
+                    "responses": {
+                        "200": {"description": "Scan-Ergebnis", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ScanResult"}}}},
+                        "401": unauthorized,
+                        "403": forbidden,
+                        "404": not_found,
+                        "409": {"description": "Quelle nicht freigegeben", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                    },
+                },
             },
             "/api/v1/full": {
                 "get": {

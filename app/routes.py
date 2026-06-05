@@ -10,6 +10,7 @@ from app.forms import ApiTokenForm, LoginForm, ProductForm, ProductReviewForm, R
 from app.models import ApiToken, Product, ProductReview, SourceRequest, User
 from app.openapi import build_openapi_spec
 from app.scanner import is_scraping_allowed, scan_products_from_url
+from app.services import RobotsForbidden, SourceNotApproved, import_products_from_source, upsert_review
 
 main_bp = Blueprint("main", __name__)
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -38,21 +39,43 @@ def _parse_api_token(raw_token: str) -> tuple[int, str] | tuple[None, None]:
         return None, None
 
 
+def _resolve_api_token():
+    """Validate the X-API-Token header; return (token, None) or (None, error_response)."""
+    raw_token = request.headers.get("X-API-Token", "")
+    token_id, secret = _parse_api_token(raw_token)
+    if token_id is None or not secret:
+        return None, (jsonify({"error": "Invalid API token format"}), 401)
+
+    token = db.session.get(ApiToken, token_id)
+    if token is None or not token.check_secret(secret):
+        return None, (jsonify({"error": "Invalid API token"}), 401)
+
+    token.last_used_at = datetime.now(timezone.utc)
+    db.session.commit()
+    g.api_token = token
+    return token, None
+
+
 def api_token_required(view_func):
     @wraps(view_func)
     def wrapped(*args, **kwargs):
-        raw_token = request.headers.get("X-API-Token", "")
-        token_id, secret = _parse_api_token(raw_token)
-        if token_id is None or not secret:
-            return jsonify({"error": "Invalid API token format"}), 401
+        _token, error = _resolve_api_token()
+        if error:
+            return error
+        return view_func(*args, **kwargs)
 
-        token = db.session.get(ApiToken, token_id)
-        if token is None or not token.check_secret(secret):
-            return jsonify({"error": "Invalid API token"}), 401
+    return wrapped
 
-        token.last_used_at = datetime.now(timezone.utc)
-        db.session.commit()
-        g.api_token = token
+
+def api_admin_token_required(view_func):
+    """Like api_token_required, but the token must be admin-scoped (write access)."""
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        token, error = _resolve_api_token()
+        if error:
+            return error
+        if not token.is_admin:
+            return jsonify({"error": "Admin-scoped API token required"}), 403
         return view_func(*args, **kwargs)
 
     return wrapped
@@ -191,7 +214,7 @@ def toggle_user_active(user_id: int):
 def create_api_token():
     form = ApiTokenForm()
     if form.validate_on_submit():
-        token = ApiToken(name=form.name.data, created_by_id=current_user.id, token_hash="placeholder")
+        token = ApiToken(name=form.name.data, created_by_id=current_user.id, token_hash="placeholder", is_admin=form.is_admin.data)
         db.session.add(token)
         db.session.flush()
         secret = ApiToken.generate_secret()
@@ -217,47 +240,29 @@ def deactivate_api_token(token_id: int):
 @admin_required
 def scan_source(request_id: int):
     source_request = db.get_or_404(SourceRequest, request_id)
-    if source_request.status != "approved":
+    try:
+        # Pass this module's names so monkeypatching app.routes.* still works in tests.
+        result = import_products_from_source(
+            source_request,
+            scan=scan_products_from_url,
+            robots_allowed=is_scraping_allowed,
+        )
+    except SourceNotApproved:
         flash("Nur freigegebene Sources können gescannt werden.", "warning")
         return redirect(url_for('admin.dashboard'))
-    if not is_scraping_allowed(source_request.source_url):
+    except RobotsForbidden:
         flash("robots.txt verbietet das Scannen dieser Quelle.", "danger")
         return redirect(url_for('admin.dashboard'))
-    try:
-        scanned = scan_products_from_url(source_request.source_url)
     except Exception as exc:  # network / parsing failure — don't 500 the admin UI
         flash(f"Scan fehlgeschlagen: {exc}", "danger")
         return redirect(url_for('admin.dashboard'))
 
-    found = len(scanned)
-    if found == 0:
+    if result["found"] == 0:
         flash("Keine strukturierten Produktdaten gefunden (JSON-LD).", "warning")
         return redirect(url_for('admin.dashboard'))
-
-    created = 0
-    duplicates = 0
-    for item in scanned:
-        exists = Product.query.filter_by(name=item.name, manufacturer=item.manufacturer).first()
-        if exists:
-            duplicates += 1
-            continue
-        db.session.add(Product(
-            name=item.name,
-            manufacturer=item.manufacturer,
-            category='Disc',
-            description=item.description,
-            product_url=item.product_url,
-            image_url=item.image_url,
-            disc_type=item.disc_type,
-            speed=item.speed,
-            glide=item.glide,
-            turn=item.turn,
-            fade=item.fade,
-        ))
-        created += 1
-    db.session.commit()
     flash(
-        f"Scan abgeschlossen: {found} gefunden, {created} neu, {duplicates} bereits vorhanden.",
+        f"Scan abgeschlossen: {result['found']} gefunden, {result['created']} neu, "
+        f"{result['duplicates']} bereits vorhanden.",
         "success",
     )
     return redirect(url_for('admin.dashboard'))
@@ -297,6 +302,7 @@ def _serialize_product(product: Product, include_reviews: bool = True) -> dict:
         "category": product.category,
         "description": product.description,
         "product_url": product.product_url,
+        "image_url": product.image_url,
         "disc_type": product.disc_type,
         "flight_numbers": {
             "speed": product.speed,
@@ -381,3 +387,136 @@ def api_full_dump():
         "products": [_serialize_product(p, include_reviews=True) for p in products],
         "source_requests": [_serialize_source_request(s) for s in source_requests],
     })
+
+
+# --- API write endpoints (admin-scoped token) ------------------------------
+# Optional Product fields a client may set/patch (name and category handled
+# explicitly because of validation / default).
+_PRODUCT_WRITABLE_FIELDS = (
+    "manufacturer", "description", "product_url", "image_url", "disc_type",
+    "speed", "glide", "turn", "fade", "diameter_cm", "weight_range_g",
+    "plastic_type", "stability",
+)
+_VALID_SOURCE_STATUSES = ("open", "approved", "rejected")
+
+
+@api_bp.route("/v1/products", methods=["POST"])
+@api_admin_token_required
+def api_create_product():
+    """Create a product. Requires `name`; `category` defaults to 'Disc'."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Field 'name' is required"}), 400
+    product = Product(name=name, category=(data.get("category") or "Disc"))
+    for field in _PRODUCT_WRITABLE_FIELDS:
+        if field in data:
+            setattr(product, field, data[field])
+    db.session.add(product)
+    db.session.commit()
+    return jsonify(_serialize_product(product)), 201
+
+
+@api_bp.route("/v1/products/<int:product_id>", methods=["PATCH"])
+@api_admin_token_required
+def api_update_product(product_id: int):
+    """Partially update a product."""
+    product = db.session.get(Product, product_id)
+    if product is None:
+        return jsonify({"error": "Product not found"}), 404
+    data = request.get_json(silent=True) or {}
+    if "name" in data:
+        name = (data.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "'name' cannot be empty"}), 400
+        product.name = name
+    if data.get("category"):
+        product.category = data["category"]
+    for field in _PRODUCT_WRITABLE_FIELDS:
+        if field in data:
+            setattr(product, field, data[field])
+    db.session.commit()
+    return jsonify(_serialize_product(product)), 200
+
+
+@api_bp.route("/v1/products/<int:product_id>", methods=["DELETE"])
+@api_admin_token_required
+def api_delete_product(product_id: int):
+    """Delete a product (and its reviews)."""
+    product = db.session.get(Product, product_id)
+    if product is None:
+        return jsonify({"error": "Product not found"}), 404
+    db.session.delete(product)
+    db.session.commit()
+    return "", 204
+
+
+@api_bp.route("/v1/sources", methods=["POST"])
+@api_admin_token_required
+def api_create_source():
+    """Create a source request (defaults to status 'open')."""
+    data = request.get_json(silent=True) or {}
+    url = (data.get("source_url") or "").strip()
+    if not url:
+        return jsonify({"error": "Field 'source_url' is required"}), 400
+    status = data.get("status") or "open"
+    if status not in _VALID_SOURCE_STATUSES:
+        return jsonify({"error": f"status must be one of {_VALID_SOURCE_STATUSES}"}), 400
+    source_request = SourceRequest(
+        source_url=url, note=data.get("note"), status=status,
+        requested_by_id=g.api_token.created_by_id,
+    )
+    db.session.add(source_request)
+    db.session.commit()
+    return jsonify(_serialize_source_request(source_request)), 201
+
+
+@api_bp.route("/v1/sources/<int:source_id>", methods=["PATCH"])
+@api_admin_token_required
+def api_update_source(source_id: int):
+    """Update a source request's status and/or note."""
+    source_request = db.session.get(SourceRequest, source_id)
+    if source_request is None:
+        return jsonify({"error": "Source request not found"}), 404
+    data = request.get_json(silent=True) or {}
+    if "status" in data:
+        if data["status"] not in _VALID_SOURCE_STATUSES:
+            return jsonify({"error": f"status must be one of {_VALID_SOURCE_STATUSES}"}), 400
+        source_request.status = data["status"]
+    if "note" in data:
+        source_request.note = data["note"]
+    db.session.commit()
+    return jsonify(_serialize_source_request(source_request)), 200
+
+
+@api_bp.route("/v1/sources/<int:source_id>/scan", methods=["POST"])
+@api_admin_token_required
+def api_scan_source(source_id: int):
+    """Scan an approved source and import new products."""
+    source_request = db.session.get(SourceRequest, source_id)
+    if source_request is None:
+        return jsonify({"error": "Source request not found"}), 404
+    try:
+        result = import_products_from_source(source_request)
+    except SourceNotApproved:
+        return jsonify({"error": "Source request is not approved"}), 409
+    except RobotsForbidden:
+        return jsonify({"error": "robots.txt forbids scanning this source"}), 403
+    except Exception as exc:  # network / parsing failure
+        return jsonify({"error": f"Scan failed: {exc}"}), 502
+    return jsonify(result), 200
+
+
+@api_bp.route("/v1/products/<int:product_id>/reviews", methods=["POST"])
+@api_admin_token_required
+def api_create_review(product_id: int):
+    """Create/update the token owner's review for a product."""
+    product = db.session.get(Product, product_id)
+    if product is None:
+        return jsonify({"error": "Product not found"}), 404
+    data = request.get_json(silent=True) or {}
+    rating = data.get("rating")
+    if not isinstance(rating, int) or isinstance(rating, bool) or not (1 <= rating <= 5):
+        return jsonify({"error": "'rating' must be an integer between 1 and 5"}), 400
+    review, created = upsert_review(g.api_token.created_by, product, rating, data.get("comment"))
+    return jsonify(_serialize_review(review)), (201 if created else 200)

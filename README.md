@@ -15,13 +15,22 @@ FlightDeck DG Hub ist eine DiscGolf-Wissensplattform mit Flask, MariaDB und Dock
 - Datenschutzseite und Einwilligung bei Registrierung
 
 ## API
-Lesendes REST-API, Auth über `X-API-Token` (Token im Admin-Dashboard erstellen):
+REST-API, Auth über `X-API-Token` (Token im Admin-Dashboard erstellen). Lesende
+Endpunkte funktionieren mit jedem Token; **schreibende Endpunkte erfordern einen
+Admin-Token** (Checkbox „Admin (Schreibrechte)" beim Erstellen).
 
+Lesend:
 - `GET /api/v1/health` (öffentlich)
 - `GET /api/v1/products` (Token; `?q=`, `?category=`)
 - `GET /api/v1/products/<id>` (Token)
 - `GET /api/v1/full` (Token)
 
+Schreibend (Admin-Token):
+- `POST /api/v1/products`, `PATCH /api/v1/products/<id>`, `DELETE /api/v1/products/<id>`
+- `POST /api/v1/sources`, `PATCH /api/v1/sources/<id>`, `POST /api/v1/sources/<id>/scan`
+- `POST /api/v1/products/<id>/reviews`
+
+Interaktive Doku: **Swagger UI** unter `/api/docs` (Spec: `/api/openapi.json`).
 Details: [`scripts/API_Readme.md`](scripts/API_Readme.md).
 
 ## Tests

@@ -59,13 +59,23 @@ def product(db):
     return p
 
 
-@pytest.fixture()
-def api_token(db, admin):
-    """Creates an active API token and returns the plaintext value for headers."""
-    token = ApiToken(name="test-token", created_by_id=admin.id, token_hash="placeholder")
+def _make_token(db, admin, *, name, is_admin):
+    token = ApiToken(name=name, created_by_id=admin.id, token_hash="placeholder", is_admin=is_admin)
     db.session.add(token)
     db.session.flush()
     secret = ApiToken.generate_secret()
     token.set_secret(secret)
     db.session.commit()
     return ApiToken.build_plaintext_token(token.id, secret)
+
+
+@pytest.fixture()
+def api_token(db, admin):
+    """An active read-only API token (plaintext, for the X-API-Token header)."""
+    return _make_token(db, admin, name="read-token", is_admin=False)
+
+
+@pytest.fixture()
+def admin_api_token(db, admin):
+    """An active admin-scoped API token allowed to perform write operations."""
+    return _make_token(db, admin, name="admin-token", is_admin=True)
