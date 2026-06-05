@@ -15,7 +15,25 @@ FlightDeck DG Hub ist eine DiscGolf-Wissensplattform mit Flask, MariaDB und Dock
 - Datenschutzseite und Einwilligung bei Registrierung
 
 ## API
-- `GET /api/v1/full` (Token erforderlich via `X-API-Token`)
+Lesendes REST-API, Auth über `X-API-Token` (Token im Admin-Dashboard erstellen):
+
+- `GET /api/v1/health` (öffentlich)
+- `GET /api/v1/products` (Token; `?q=`, `?category=`)
+- `GET /api/v1/products/<id>` (Token)
+- `GET /api/v1/full` (Token)
+
+Details: [`scripts/API_Readme.md`](scripts/API_Readme.md).
+
+## Tests
+```bash
+python -m venv .venv && .venv/Scripts/pip install -r requirements-dev.txt
+.venv/Scripts/python -m pytest
+```
+
+## Dokumentation
+- [`docs/PRAXISARBEIT.md`](docs/PRAXISARBEIT.md) – Lösungsdokument (Management Summary, User Manual, API, Diagramme, Testprotokoll)
+- [`docs/ARCHITEKTUR.md`](docs/ARCHITEKTUR.md) – Architektur & Begründung
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) – Deployment-Anleitung (Lab-VM)
 
 ## Docker Compose
 Die Plattform läuft weiterhin mit **Docker + Flask + MariaDB**.

@@ -1,131 +1,136 @@
-# ClubCore – Architektur & Begründung
+# FlightDeck DG Hub – Architektur & Begründung
+
+> Diese Datei beschreibt die **tatsächlich implementierte** Architektur. Punkte,
+> die noch nicht umgesetzt sind, stehen klar getrennt unter „Roadmap“.
 
 ## 1. Zielbild
 
-ClubCore ist als **klassische 3-Schichten-Webanwendung** aufgebaut:
+FlightDeck DG Hub ist eine Disc-Golf-Wissensplattform und als klassische
+**3-Schichten-Webanwendung** aufgebaut:
 
-1. **Präsentation**: Browser + Jinja2/Bootstrap UI
-2. **Anwendung**: Flask-App (Business-Logik, Auth, CRUD, API)
-3. **Datenhaltung**: MariaDB
+1. **Präsentation** – serverseitig gerenderte Jinja2-Templates + Bootstrap 5
+2. **Anwendung** – Flask-App (Auth, CRUD, Geschäftslogik, REST-API)
+3. **Datenhaltung** – MariaDB (relationale Datenbank)
 
-Im Betrieb wird davor ein **Nginx Reverse Proxy** gesetzt, der TLS terminiert und Requests an Flask weiterleitet.
+Im Produktionsbetrieb terminiert ein **Nginx Reverse Proxy** TLS und leitet die
+Requests an die per **Gunicorn** betriebene Flask-App weiter.
 
----
+```
+Browser / API-Client
+        │  HTTPS
+        ▼
+   ┌─────────┐      ┌──────────────────┐      ┌──────────┐
+   │  Nginx  │ ───► │ Gunicorn + Flask │ ───► │ MariaDB  │
+   │  (TLS)  │      │   (app:5000)     │      │ (db:3306)│
+   └─────────┘      └──────────────────┘      └──────────┘
+```
 
 ## 2. Komponenten und Verantwortlichkeiten
 
-## 2.1 Browser / Frontend
-- Serverseitig gerenderte Templates (`app/templates/*`).
+### 2.1 Browser / Frontend
+- Serverseitig gerenderte Templates (`app/templates/*`), Bootstrap über CDN.
 - Vorteil: geringe Frontend-Komplexität, schneller Projektstart, einfaches Hosting.
 
-## 2.2 Nginx (`nginx`-Container)
-- TLS-Terminierung (HTTPS).
-- HTTP → HTTPS Redirect.
-- Reverse Proxy auf `app:5000`.
-- Begründung: stabile und performante Standard-Lösung für TLS, Caching/Compression später leicht erweiterbar.
+### 2.2 Nginx (`nginx`-Container)
+- TLS-Terminierung (HTTPS), HTTP→HTTPS-Redirect, Reverse Proxy auf `app:5000`.
+- Konfiguration als Template (`nginx/templates/flightdeck.conf.template`), das
+  beim Start per `envsubst` mit Domain/Zertifikatsnamen befüllt wird.
+- Begründung: bewährte, performante Standardlösung für TLS; Caching/Compression
+  später leicht ergänzbar.
 
-## 2.3 Flask-App (`app`-Container)
-- Blueprints für Auth, Members, Roles, Events, API.
-- Flask-Login für Session-Auth.
-- Flask-WTF für Validierung/CSRF-Schutz.
-- SQLAlchemy ORM für Datenzugriff.
-- Begründung: schnelle Entwicklung, gute Erweiterbarkeit, große Community.
+### 2.3 Flask-App (`app`-Container)
+- **Blueprints**: `main` (öffentliche Liste/Datenschutz), `auth` (Login/Register),
+  `products` (CRUD, Reviews, Source-Anfragen), `admin` (Moderation, Token),
+  `api` (REST-API). Siehe `app/routes.py`.
+- **Flask-Login** für Session-Authentifizierung.
+- **Flask-WTF** für Formularvalidierung und CSRF-Schutz.
+- **SQLAlchemy ORM** + **Flask-Migrate** für Datenzugriff und Schemamigrationen.
+- Betrieb über **Gunicorn** (`2 workers`, `4 threads`, siehe `Dockerfile`).
+- Begründung: schnelle Entwicklung, große Community, gute Erweiterbarkeit.
 
-## 2.4 Datenbank (`db`-Container)
-- MariaDB als persistente relationale Datenhaltung.
-- Persistenz via Docker Volume (`db_data`).
-- Begründung: robust für transaktionale CRUD-Workloads und gut mit SQLAlchemy kombinierbar.
+### 2.4 Datenbank (`db`-Container)
+- MariaDB 11.4 als persistente relationale Datenhaltung.
+- Persistenz über Docker-Volume `db_data`.
+- Begründung: robust für transaktionale CRUD-Workloads, gut mit SQLAlchemy
+  kombinierbar.
 
-## 2.5 Certbot (`certbot`-Container)
-- Zertifikatsausstellung und -erneuerung für Let’s Encrypt.
-- Begründung: Standardweg für kostenfreie TLS-Zertifikate mit automatisierbarer Renewal-Strategie.
+## 3. Datenmodell
 
----
+Tabellen (siehe `app/models.py`):
 
-## 3. Laufzeitfluss (Request Flow)
+- **User** – Benutzerkonto (eindeutiger `username` + `email`, gehashtes
+  Passwort, `is_admin`, `privacy_consent`).
+- **Product** – Disc/Produkt mit Disc-Golf-Flugwerten (`speed`, `glide`,
+  `turn`, `fade`) und weiteren Attributen.
+- **ProductReview** – Bewertung (1–5) + Kommentar; `UniqueConstraint` auf
+  (`user_id`, `product_id`): **eine** Bewertung pro Benutzer und Produkt.
+- **SourceRequest** – Benutzer-Anfrage, eine externe Quelle zu scannen;
+  Status `open` / `approved` / `rejected`.
+- **ApiToken** – API-Zugangstoken (nur Hash gespeichert), aktiv/deaktivierbar.
 
-1. Client sendet Request an `https://<domain>`.
-2. Nginx nimmt TLS entgegen und leitet intern an Flask weiter.
-3. Flask verarbeitet Route, Auth, Business-Regeln.
+Beziehungen: `User 1—* ProductReview *—1 Product`,
+`User 1—* SourceRequest`, `User 1—* ApiToken`.
+
+## 4. Geschäftslogik (Auswahl)
+
+- **Suche & Filter** der Produkte nach Freitext (`q`) und Kategorie.
+- **Review-Logik**: Upsert pro (User, Produkt) – verhindert Mehrfachbewertungen.
+- **Source-Scanning** (`app/scanner.py`): Nur **freigegebene** Quellen werden
+  gescannt; vorher wird `robots.txt` geprüft (`is_scraping_allowed`). Produkte
+  werden aus `application/ld+json`-`Product`-Markup extrahiert; Duplikate
+  (gleicher Name + Hersteller) werden übersprungen.
+- **REST-API** (`/api/v1/*`): lesender Zugriff mit Token-Authentifizierung.
+
+## 5. Sicherheits- und Betriebsprinzipien (implementiert)
+
+- **CSRF-Schutz** über Flask-WTF auf allen Formularen.
+- **Security-Header** (`app/__init__.py`): `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy`.
+- **Passwort-Hashing** (`werkzeug.security`), API-Token nur als Hash gespeichert.
+- **Cookie-Hardening**: `HttpOnly`, `SameSite=Lax`, `Secure` optional über
+  `COOKIE_SECURE`.
+- **Zugriffsschutz**: Login-Pflicht für schreibende Aktionen, `admin_required`
+  für Admin-Funktionen, Token-Pflicht für die Daten-Endpunkte des API.
+- **Container-Hardening**: `no-new-privileges`, `read_only`-Rootfs für app/nginx,
+  dedizierter Non-Root-User im Image.
+- **Datenschutz**: explizite Einwilligung bei der Registrierung, Datenschutzseite.
+
+## 6. Request Flow
+
+1. Client → `https://<domain>`.
+2. Nginx terminiert TLS, leitet intern an Gunicorn/Flask weiter.
+3. Flask verarbeitet Route, Auth, Geschäftsregeln.
 4. SQLAlchemy liest/schreibt MariaDB.
-5. Flask rendert HTML oder liefert JSON.
-6. Nginx liefert Response an den Browser.
+5. Flask rendert HTML **oder** liefert JSON (API).
+6. Nginx liefert die Response an den Client.
 
----
+## 7. Wartbarkeit, Skalierbarkeit, Verfügbarkeit
 
-## 4. Sicherheits- und Betriebsprinzipien
+**Wartbarkeit**
+- Klare Blueprint-Trennung, ORM statt Roh-SQL, zentrale Serializer für das API.
+- Automatisierte Tests (`tests/`, pytest) und Schemamigrationen (Flask-Migrate).
 
-- Keine öffentliche Registrierung, nur Admin-basierte Benutzeranlage.
-- Zugriffsschutz via Login + `admin_required` für schreibende Aktionen.
-- CSRF-Schutz durch Flask-WTF.
-- Trennung der Infrastruktur in dedizierte Container.
+**Skalierbarkeit**
+- Vertikal: Gunicorn-Worker/Threads erhöhen, DB-Ressourcen anheben.
+- Horizontal: App-Container hinter Nginx/Load-Balancer replizieren; Sessions
+  serverseitig (z. B. Redis) auslagern.
 
----
+**Verfügbarkeit**
+- `restart: unless-stopped` für alle Container.
+- Zustand ausschließlich in MariaDB (Volume) → App-Container sind ersetzbar.
+- Public Health-Endpoint `/api/v1/health` für Monitoring/Healthchecks.
 
-## 5. Performance-Betrachtung (aktueller Stand)
+## 8. Roadmap (noch NICHT implementiert)
 
-Aktuell bereits umgesetzt:
+- DB-Connection-Pooling-Tuning (`pool_pre_ping`, `pool_recycle`, `pool_size`).
+- Gezielte Indizes nach `EXPLAIN`-Analyse häufiger Queries.
+- Pagination für große Produktlisten, `joinedload` gegen N+1.
+- gzip/brotli + Cache-Control für statische Assets in Nginx.
+- Healthchecks in `docker-compose.yml`, zentrale Logs/Metriken, Alerting.
+- Hintergrundjobs (z. B. Scanning) über Queue (Celery/RQ).
 
-- **DB-Connection-Pooling** über SQLAlchemy Engine Optionen:
-  - `pool_pre_ping=True`
-  - `pool_recycle`
-  - `pool_size`
-  - `max_overflow`
-- **Indizes auf häufig genutzten Spalten** (z. B. `Member.last_name`, `Member.status`, `Event.event_date`).
+## 9. Entscheidungsfazit
 
-Warum das hilft:
-
-- Pooling reduziert Verbindungsaufbaukosten und stabilisiert Lastspitzen.
-- Indizes beschleunigen typische Listen-, Filter- und Sortierabfragen.
-
----
-
-## 6. Konkrete nächste Optimierungen (Roadmap)
-
-## 6.1 App/Backend
-- Gunicorn-Tuning pro CPU (`workers`, `threads`, `timeout`, `max-requests`).
-- Pagination für große Tabellen (Members/Events).
-- Selektives eager loading (`joinedload`) für N+1-Vermeidung.
-- Read-heavy Endpunkte mit kurzem Cache (z. B. Dashboard).
-
-## 6.2 Datenbank
-- EXPLAIN-Analyse für häufige Queries.
-- Composite-Index für kombinierte Filter (z. B. `status + last_name`).
-- Geplante Bereinigung/Archivierung historischer Daten.
-
-## 6.3 Nginx
-- gzip/brotli aktivieren.
-- Statische Assets mit Cache-Control ausliefern.
-- Upstream Keepalive und Timeouts feinjustieren.
-
-## 6.4 Betrieb/Monitoring
-- Healthchecks in `docker-compose.yml`.
-- Metriken + Logs zentralisieren (Prometheus/Grafana, Loki/ELK).
-- Alerting bei Container-Neustarts, DB-Verbindungen, 5xx-Rate.
-
----
-
-## 7. Skalierungsstrategie
-
-Kurzfristig (vertikal):
-- Mehr CPU/RAM, Gunicorn-Worker hochsetzen, DB-Parameter feinjustieren.
-
-Mittelfristig (horizontal):
-- Flask-App mehrfach replizieren.
-- Nginx bzw. Load Balancer vor mehreren App-Instanzen.
-- Sessions entweder sticky oder serverseitig (Redis) verwalten.
-
-Langfristig:
-- Optional Trennung in API + Frontend.
-- Background Jobs (z. B. Mail, Exporte) über Queue (Celery/RQ).
-
----
-
-## 8. Entscheidungsfazit
-
-Die aktuelle Architektur ist bewusst **einfach, robust und produktionsnah** gewählt:
-
-- schnell deploybar,
-- gut wartbar,
-- für kleine bis mittlere Vereinsgrößen ausreichend performant,
-- und mit klaren Entwicklungspfaden für zukünftige Laststeigerung.
+Die Architektur ist bewusst **einfach, robust und produktionsnah** gewählt:
+schnell deploybar, gut wartbar, für kleine bis mittlere Last ausreichend
+performant – mit klaren Pfaden für spätere Laststeigerung.
