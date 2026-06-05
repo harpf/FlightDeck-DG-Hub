@@ -73,6 +73,50 @@ def test_admin_dashboard_forbidden_for_normal_user(client, user):
     assert resp.status_code == 403
 
 
+def test_admin_can_deactivate_user(client, admin, user, db):
+    client.post("/auth/login", data={"username": "admin", "password": "adminpass123"})
+    resp = client.post(f"/admin/users/{user.id}/toggle-active", follow_redirects=True)
+    assert resp.status_code == 200
+    assert db.session.get(User, user.id).is_active is False
+    # toggling again re-activates
+    client.post(f"/admin/users/{user.id}/toggle-active")
+    assert db.session.get(User, user.id).is_active is True
+
+
+def test_admin_cannot_deactivate_self(client, admin, db):
+    client.post("/auth/login", data={"username": "admin", "password": "adminpass123"})
+    client.post(f"/admin/users/{admin.id}/toggle-active", follow_redirects=True)
+    assert db.session.get(User, admin.id).is_active is True
+
+
+def test_deactivated_user_cannot_login(client, user, db):
+    user.is_active = False
+    db.session.commit()
+    resp = client.post(
+        "/auth/login",
+        data={"username": "tester", "password": "password123"},
+        follow_redirects=True,
+    )
+    assert "deaktiviert".encode() in resp.data
+    assert client.get("/products/new").status_code == 302  # not logged in
+
+
+def test_active_session_ends_when_deactivated(client, user, db):
+    client.post("/auth/login", data={"username": "tester", "password": "password123"})
+    assert client.get("/products/new").status_code == 200  # logged in
+    user.is_active = False
+    db.session.commit()
+    resp = client.get("/products/new")
+    assert resp.status_code == 302
+    assert "/auth/login" in resp.headers["Location"]
+
+
+def test_toggle_user_requires_admin(client, user, admin):
+    client.post("/auth/login", data={"username": "tester", "password": "password123"})
+    resp = client.post(f"/admin/users/{admin.id}/toggle-active")
+    assert resp.status_code == 403
+
+
 def test_create_product_requires_login(client):
     resp = client.get("/products/new")
     # Flask-Login redirects anonymous users to the login page

@@ -1,6 +1,7 @@
 import logging
 
-from flask import Flask, render_template
+from flask import Flask, redirect, render_template, url_for
+from flask_login import current_user, logout_user
 
 from config import Config
 from app.extensions import db, login_manager, migrate
@@ -26,8 +27,18 @@ def create_app(config_class=Config):
     register_error_handlers(app)
     register_cli_commands(app)
     register_security_headers(app)
+    register_session_guard(app)
 
     return app
+
+
+def register_session_guard(app: Flask) -> None:
+    @app.before_request
+    def logout_deactivated_users():
+        # Immediately end the session of a user that was deactivated mid-session.
+        if current_user.is_authenticated and not current_user.is_active:
+            logout_user()
+            return redirect(url_for("auth.login"))
 
 
 def configure_logging(app: Flask) -> None:

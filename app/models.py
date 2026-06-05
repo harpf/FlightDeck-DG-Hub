@@ -18,6 +18,8 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
+    # Overrides UserMixin.is_active: a deactivated user can no longer log in.
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
     privacy_consent = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 

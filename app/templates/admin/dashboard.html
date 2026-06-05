@@ -68,20 +68,36 @@
     <h2 class="h5"><i class="bi bi-people"></i> Registrierte Benutzer <span class="text-muted fs-6">({{ users|length }})</span></h2>
     <div class="table-responsive">
       <table class="table table-sm align-middle mb-0">
-        <thead><tr><th>Benutzername</th><th>E-Mail</th><th>Rolle</th><th>Registriert</th><th class="text-end">Bewertungen</th></tr></thead>
+        <thead><tr><th>Benutzername</th><th>E-Mail</th><th>Rolle</th><th>Status</th><th>Registriert</th><th class="text-end">Bewertungen</th><th></th></tr></thead>
         <tbody>
         {% for u in users %}
-          <tr>
+          <tr{% if not u.is_active %} class="table-warning"{% endif %}>
             <td><i class="bi bi-person-circle"></i> {{ u.username }}</td>
             <td class="text-muted">{{ u.email }}</td>
             <td>
               {% if u.is_admin %}<span class="badge text-bg-success">Admin</span>{% else %}<span class="badge text-bg-secondary">User</span>{% endif %}
             </td>
+            <td>
+              {% if u.is_active %}<span class="badge text-bg-success">aktiv</span>{% else %}<span class="badge text-bg-danger">deaktiviert</span>{% endif %}
+            </td>
             <td class="text-muted small">{{ u.created_at.strftime('%d.%m.%Y') }}</td>
             <td class="text-end">{{ u.reviews|length }}</td>
+            <td class="text-end">
+              {% if u.id == current_user.id %}
+                <span class="text-muted small">(du)</span>
+              {% else %}
+                <form method="post" action="{{ url_for('admin.toggle_user_active', user_id=u.id) }}">
+                  {% if u.is_active %}
+                  <button class="btn btn-sm btn-outline-danger"><i class="bi bi-person-x"></i> deaktivieren</button>
+                  {% else %}
+                  <button class="btn btn-sm btn-outline-success"><i class="bi bi-person-check"></i> aktivieren</button>
+                  {% endif %}
+                </form>
+              {% endif %}
+            </td>
           </tr>
         {% else %}
-          <tr><td colspan="5" class="text-muted">Keine Benutzer.</td></tr>
+          <tr><td colspan="7" class="text-muted">Keine Benutzer.</td></tr>
         {% endfor %}
         </tbody>
       </table>

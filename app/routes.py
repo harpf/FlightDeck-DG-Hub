@@ -103,6 +103,9 @@ def login():
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
         if user and user.check_password(form.password.data):
+            if not user.is_active:
+                flash("Dieses Konto wurde deaktiviert. Bitte wende dich an den Administrator.", "danger")
+                return render_template("auth/login.html", form=form)
             login_user(user)
             return redirect(url_for("main.home"))
         flash("Ungültige Zugangsdaten.", "danger")
@@ -165,6 +168,20 @@ def dashboard():
     tokens = ApiToken.query.order_by(ApiToken.created_at.desc()).all()
     users = User.query.order_by(User.created_at.desc()).all()
     return render_template("admin/dashboard.html", source_requests=source_requests, tokens=tokens, users=users, token_form=ApiTokenForm(), status_form=SourceRequestStatusForm())
+
+
+@admin_bp.route("/users/<int:user_id>/toggle-active", methods=["POST"])
+@admin_required
+def toggle_user_active(user_id: int):
+    user = db.get_or_404(User, user_id)
+    if user.id == current_user.id:
+        flash("Du kannst dein eigenes Konto nicht deaktivieren.", "warning")
+        return redirect(url_for("admin.dashboard"))
+    user.is_active = not user.is_active
+    db.session.commit()
+    state = "aktiviert" if user.is_active else "deaktiviert"
+    flash(f'Benutzer „{user.username}" wurde {state}.', "info")
+    return redirect(url_for("admin.dashboard"))
 
 
 @admin_bp.route('/tokens/create', methods=['POST'])

@@ -74,7 +74,8 @@ aber noch nicht aktiviert (siehe Kapitel 7).
 - **User (registriert):** zusätzlich Produkte anlegen, Produkte bewerten,
   Source-Anfragen senden.
 - **Admin:** zusätzlich Source-Anfragen moderieren (freigeben/ablehnen), Quellen
-  scannen, API-Tokens verwalten sowie **alle registrierten Benutzer einsehen**.
+  scannen, API-Tokens verwalten sowie **alle registrierten Benutzer einsehen und
+  deaktivieren/aktivieren**.
 
 **Typische Abläufe**
 
