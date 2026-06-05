@@ -1,10 +1,15 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import secrets
 
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.extensions import db, login_manager
+
+
+def utcnow() -> datetime:
+    """Timezone-aware UTC now (SQLAlchemy 2.0 / modern datetime style)."""
+    return datetime.now(timezone.utc)
 
 
 class User(UserMixin, db.Model):
@@ -14,7 +19,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
     privacy_consent = db.Column(db.Boolean, default=False, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
     reviews = db.relationship("ProductReview", back_populates="user", lazy=True)
     source_requests = db.relationship("SourceRequest", back_populates="requested_by", lazy=True)
@@ -43,7 +48,7 @@ class Product(db.Model):
     weight_range_g = db.Column(db.String(32))
     plastic_type = db.Column(db.String(120))
     stability = db.Column(db.String(120))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
     reviews = db.relationship("ProductReview", back_populates="product", lazy=True, cascade="all, delete-orphan")
 
@@ -52,7 +57,7 @@ class ProductReview(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rating = db.Column(db.Integer, nullable=False)
     comment = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False)
     user = db.relationship("User", back_populates="reviews")
@@ -65,7 +70,7 @@ class SourceRequest(db.Model):
     source_url = db.Column(db.String(500), nullable=False)
     note = db.Column(db.Text)
     status = db.Column(db.String(20), default="open", nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
     requested_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     requested_by = db.relationship("User", back_populates="source_requests")
 
@@ -74,7 +79,7 @@ class ApiToken(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     token_hash = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
     last_used_at = db.Column(db.DateTime)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
@@ -97,4 +102,4 @@ class ApiToken(db.Model):
 
 @login_manager.user_loader
 def load_user(user_id: str):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))

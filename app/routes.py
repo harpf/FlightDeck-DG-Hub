@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
@@ -44,11 +44,11 @@ def api_token_required(view_func):
         if token_id is None or not secret:
             return jsonify({"error": "Invalid API token format"}), 401
 
-        token = ApiToken.query.get(token_id)
+        token = db.session.get(ApiToken, token_id)
         if token is None or not token.check_secret(secret):
             return jsonify({"error": "Invalid API token"}), 401
 
-        token.last_used_at = datetime.utcnow()
+        token.last_used_at = datetime.now(timezone.utc)
         db.session.commit()
         g.api_token = token
         return view_func(*args, **kwargs)
@@ -129,7 +129,7 @@ def create_product():
 
 @products_bp.route("/<int:product_id>", methods=["GET", "POST"])
 def product_detail(product_id):
-    product = Product.query.get_or_404(product_id)
+    product = db.get_or_404(Product, product_id)
     form = ProductReviewForm()
     if current_user.is_authenticated and form.validate_on_submit():
         review = ProductReview.query.filter_by(user_id=current_user.id, product_id=product.id).first()
@@ -183,7 +183,7 @@ def create_api_token():
 @admin_bp.route('/tokens/<int:token_id>/deactivate', methods=['POST'])
 @admin_required
 def deactivate_api_token(token_id: int):
-    token = ApiToken.query.get_or_404(token_id)
+    token = db.get_or_404(ApiToken, token_id)
     token.is_active = False
     db.session.commit()
     flash("Token deaktiviert.", "info")
@@ -195,7 +195,7 @@ def deactivate_api_token(token_id: int):
 @admin_bp.route('/sources/<int:request_id>/scan', methods=['POST'])
 @admin_required
 def scan_source(request_id: int):
-    source_request = SourceRequest.query.get_or_404(request_id)
+    source_request = db.get_or_404(SourceRequest, request_id)
     if source_request.status != "approved":
         flash("Nur freigegebene Sources können gescannt werden.", "warning")
         return redirect(url_for('admin.dashboard'))
@@ -217,7 +217,7 @@ def scan_source(request_id: int):
 @admin_bp.route("/sources/<int:request_id>", methods=["POST"])
 @admin_required
 def update_source_status(request_id):
-    source_request = SourceRequest.query.get_or_404(request_id)
+    source_request = db.get_or_404(SourceRequest, request_id)
     form = SourceRequestStatusForm()
     if form.validate_on_submit():
         source_request.status = form.status.data
@@ -226,8 +226,98 @@ def update_source_status(request_id):
     return redirect(url_for("admin.dashboard"))
 
 
-@api_bp.route('/v1/full')
+# --- API serializers -------------------------------------------------------
+# Kept as small, single-responsibility helpers so the JSON shape is defined in
+# exactly one place and reused by every endpoint (DRY). This avoids the drift
+# you get when each route hand-builds its own dict.
+
+def _serialize_review(review: ProductReview) -> dict:
+    return {
+        "id": review.id,
+        "rating": review.rating,
+        "comment": review.comment,
+        "created_at": review.created_at.isoformat(),
+        "username": review.user.username,
+    }
+
+
+def _serialize_product(product: Product, include_reviews: bool = True) -> dict:
+    data = {
+        "id": product.id,
+        "name": product.name,
+        "manufacturer": product.manufacturer,
+        "category": product.category,
+        "description": product.description,
+        "product_url": product.product_url,
+        "disc_type": product.disc_type,
+        "flight_numbers": {
+            "speed": product.speed,
+            "glide": product.glide,
+            "turn": product.turn,
+            "fade": product.fade,
+        },
+        "diameter_cm": product.diameter_cm,
+        "weight_range_g": product.weight_range_g,
+        "plastic_type": product.plastic_type,
+        "stability": product.stability,
+        "created_at": product.created_at.isoformat(),
+    }
+    if include_reviews:
+        data["reviews"] = [_serialize_review(r) for r in product.reviews]
+    return data
+
+
+def _serialize_source_request(source_request: SourceRequest) -> dict:
+    return {
+        "id": source_request.id,
+        "source_url": source_request.source_url,
+        "note": source_request.note,
+        "status": source_request.status,
+        "requested_by": source_request.requested_by.username,
+        "created_at": source_request.created_at.isoformat(),
+    }
+
+
+# --- API endpoints ---------------------------------------------------------
+
+@api_bp.route("/v1/health")
+def api_health():
+    """Public, unauthenticated liveness probe (used by monitoring/healthchecks)."""
+    return jsonify({"status": "ok", "service": "flightdeck-dg-hub"})
+
+
+@api_bp.route("/v1/products")
+@api_token_required
+def api_products():
+    """List discs/products. Supports the same ?q= and ?category= filters as the web UI."""
+    q = request.args.get("q", "").strip()
+    category = request.args.get("category", "").strip()
+    query = Product.query
+    if q:
+        query = query.filter((Product.name.ilike(f"%{q}%")) | (Product.manufacturer.ilike(f"%{q}%")))
+    if category:
+        query = query.filter_by(category=category)
+    products = query.order_by(Product.created_at.desc()).all()
+    return jsonify({"count": len(products), "products": [_serialize_product(p, include_reviews=False) for p in products]})
+
+
+@api_bp.route("/v1/products/<int:product_id>")
+@api_token_required
+def api_product_detail(product_id: int):
+    """Single product including its reviews. Returns 404 as JSON if not found."""
+    product = db.session.get(Product, product_id)
+    if product is None:
+        return jsonify({"error": "Product not found"}), 404
+    return jsonify(_serialize_product(product, include_reviews=True))
+
+
+@api_bp.route("/v1/full")
 @api_token_required
 def api_full_dump():
+    """Full read-only export of products (with reviews) and source requests."""
     products = Product.query.order_by(Product.id).all()
-    return jsonify({"products": [{"id": p.id, "name": p.name, "manufacturer": p.manufacturer, "category": p.category, "description": p.description, "product_url": p.product_url, "disc_type": p.disc_type, "speed": p.speed, "glide": p.glide, "turn": p.turn, "fade": p.fade, "diameter_cm": p.diameter_cm, "weight_range_g": p.weight_range_g, "plastic_type": p.plastic_type, "stability": p.stability, "created_at": p.created_at.isoformat(), "reviews": [{"id": r.id, "rating": r.rating, "comment": r.comment, "created_at": r.created_at.isoformat(), "username": r.user.username} for r in p.reviews]} for p in products], "source_requests": [{"id": s.id, "source_url": s.source_url, "note": s.note, "status": s.status, "requested_by": s.requested_by.username, "created_at": s.created_at.isoformat()} for s in SourceRequest.query.order_by(SourceRequest.id).all()]})
+    source_requests = SourceRequest.query.order_by(SourceRequest.id).all()
+    return jsonify({
+        "products": [_serialize_product(p, include_reviews=True) for p in products],
+        "source_requests": [_serialize_source_request(s) for s in source_requests],
+    })
