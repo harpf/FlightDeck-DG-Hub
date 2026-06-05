@@ -31,6 +31,7 @@ python -m venv .venv && .venv/Scripts/pip install -r requirements-dev.txt
 ```
 
 ## Dokumentation
+- [`docs/INSTALL.md`](docs/INSTALL.md) – Installationsanleitung (lokal & Server)
 - [`docs/PRAXISARBEIT.md`](docs/PRAXISARBEIT.md) – Lösungsdokument (Management Summary, User Manual, API, Diagramme, Testprotokoll)
 - [`docs/ARCHITEKTUR.md`](docs/ARCHITEKTUR.md) – Architektur & Begründung
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) – Deployment-Anleitung (Lab-VM)

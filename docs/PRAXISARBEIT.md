@@ -1,10 +1,16 @@
 # Praxisarbeit DBWE.TA1A.PA – FlightDeck DG Hub
 
+**Modul:** DBWE.TA1A.PA – Datenbanken und Webentwicklung
+**Studiengang:** HFINFA / HFINFP, 3. Studienjahr
+**Verfasser:** Max Mustermann _(Filler – bitte ersetzen)_
+**Examinator:** _<Name eintragen>_
+**Abgabedatum:** 30.06.2026 _(Filler – bitte ersetzen)_
+
 **Fach:** Datenbanken und Webentwicklung (DBWE)
 **Anwendung:** FlightDeck DG Hub – Disc-Golf-Wissensplattform
 **Technologien:** Python 3.12, Flask, MariaDB, Gunicorn, Nginx, Docker Compose
-**Repository:** _<GitHub-URL eintragen>_
-**Live-URL:** http://lab10.ifalabs.org _(Port 80, siehe Kapitel 6)_
+**Repository:** https://github.com/harpf/FlightDeck-DG-Hub
+**Live-URL:** https://lab10.ifalabs.org _(HTTPS/443; self-signed Zertifikat, siehe Anhang / `docs/DEPLOYMENT.md`)_
 
 > Dieses Dokument ist als Markdown verfasst und kann mit `pandoc` o. ä. nach PDF
 > konvertiert werden (Mermaid-Diagramme werden z. B. von Typora, VS Code oder
@@ -57,7 +63,7 @@ aber noch nicht aktiviert (siehe Kapitel 7).
 | A7 | Python ≥ 3.9 | Python 3.12 (Container-Image) |
 | A8 | Flask + Erweiterungen | Flask, Flask-SQLAlchemy, Flask-Login, Flask-WTF, Flask-Migrate |
 | A9 | Gunicorn (ggf. mit Nginx) | Gunicorn hinter Nginx Reverse Proxy |
-| A10 | Source Code auf GitHub | _<URL eintragen>_ |
+| A10 | Source Code auf GitHub | https://github.com/harpf/FlightDeck-DG-Hub |
 | A11 | Tests dokumentiert | pytest-Suite (26 Tests) + Testprotokoll (Kap. 2.6) |
 
 ### 2.2 Funktionalität und Bedienung (User Manual)
@@ -99,13 +105,13 @@ im Dashboard erstellt). Kein Browser/Session nötig.
 | `GET` | `/api/v1/products/<id>` | Token | Einzelprodukt inkl. Reviews |
 | `GET` | `/api/v1/full` | Token | Vollexport (Produkte + Reviews + Source-Requests) |
 
-Beispiele:
+Beispiele (bei self-signed Zertifikat `curl -k` verwenden):
 
 ```
-http GET   http://lab10.ifalabs.org/api/v1/health
-curl -H "X-API-Token: 3.kJ8..." http://lab10.ifalabs.org/api/v1/products
-curl -H "X-API-Token: 3.kJ8..." "http://lab10.ifalabs.org/api/v1/products?q=destroyer"
-curl -H "X-API-Token: 3.kJ8..." http://lab10.ifalabs.org/api/v1/products/1
+curl -k https://lab10.ifalabs.org/api/v1/health
+curl -k -H "X-API-Token: 3.kJ8..." https://lab10.ifalabs.org/api/v1/products
+curl -k -H "X-API-Token: 3.kJ8..." "https://lab10.ifalabs.org/api/v1/products?q=destroyer"
+curl -k -H "X-API-Token: 3.kJ8..." https://lab10.ifalabs.org/api/v1/products/1
 ```
 
 Fehlerfälle: fehlender/ungültiger Token → `401`; unbekanntes Produkt → `404`
@@ -302,10 +308,13 @@ wären mehrere Hosts, ein externer DB-Dienst und Healthchecks/Alerting nötig
 
 ## Anhang
 
-- **Repository:** _<GitHub-URL eintragen>_ (lesender Zugriff)
-- **Live-URL:** http://lab10.ifalabs.org
-- **Admin-Login:** Benutzer `admin`, Passwort siehe sichere Übergabe
-  (`BOOTSTRAP_ADMIN_PASSWORD`)
+- **Repository:** https://github.com/harpf/FlightDeck-DG-Hub (lesender Zugriff)
+- **Live-URL:** https://lab10.ifalabs.org
+- **Admin-Login:** Benutzer `admin`, Passwort `ChangeMe123!` _(Filler – beim
+  Deployment generiert/gesetzt über `BOOTSTRAP_ADMIN_PASSWORD`, sichere Übergabe
+  an Examinator)_
+- **API-Token (Beispiel):** `3.kJ8s2_FILLER_secret_xyz` _(im Admin-Dashboard
+  erzeugen, siehe Kap. 2.3)_
 - **Architektur-Detail:** `docs/ARCHITEKTUR.md`
 - **Deployment:** `docs/DEPLOYMENT.md`
 - **API-Doku:** `scripts/API_Readme.md`

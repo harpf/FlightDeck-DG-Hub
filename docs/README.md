@@ -3,6 +3,7 @@
 | Datei | Inhalt |
 | --- | --- |
 | `PRAXISARBEIT.md` | Lösungsdokument für die Abgabe (Management Summary, Anforderungen, User Manual, API, Architektur mit Diagrammen, Testprotokoll, Reflexion) |
+| `INSTALL.md` | Installationsanleitung (lokal mit venv/SQLite, lokal mit Docker, produktiver Server) |
 | `ARCHITEKTUR.md` | Detaillierte Architektur und Begründung |
 | `DEPLOYMENT.md` | Deployment-Anleitung für die Lab-VM |
 
