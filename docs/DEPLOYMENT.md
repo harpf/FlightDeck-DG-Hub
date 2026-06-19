@@ -149,21 +149,98 @@ API_TOKEN="<id>.<secret>" ./scripts/test_api_login.sh http://lab10.ifalabs.org
 
 ---
 
-## 8. Optional: enable HTTPS (Let's Encrypt)
+## 8. Trusted HTTPS with Let's Encrypt (certbot)
 
-The repo also ships a TLS nginx template (`nginx/templates/flightdeck.conf.template`).
-To switch to HTTPS:
+This is the procedure actually used to put a browser-trusted certificate on
+`lab10.ifalabs.org`. It uses certbot's **standalone** HTTP-01 challenge: nginx is
+stopped briefly so certbot can bind port 80 itself, then restarted with the new
+certificate. The stack runs with the TLS override
+(`docker-compose.yml` + `docker-compose.tls.yml`), where nginx serves
+`./certs/fullchain.pem` and `./certs/privkey.pem`.
 
-1. Ensure `DOMAIN` resolves to the VM (it does: `lab10.ifalabs.org`).
-2. Issue a certificate with certbot (webroot `./certbot/www`), e.g.:
-   ```bash
-   docker run --rm -v "$PWD/certbot/conf:/etc/letsencrypt" \
-     -v "$PWD/certbot/www:/var/www/certbot" certbot/certbot \
-     certonly --webroot -w /var/www/certbot -d lab10.ifalabs.org \
-     --email <you@example.com> --agree-tos --no-eff-email
-   ```
-3. Use the base `docker-compose.yml` (TLS template) instead of the `-http`
-   override, set `COOKIE_SECURE=1` in `.env`, and restart.
+### 8.1 Prerequisites (verify before issuing)
+
+| Requirement | Why | Check |
+| --- | --- | --- |
+| Public **A-record** `DOMAIN → VM public IP` | HTTP-01 must reach this host | `nslookup lab10.ifalabs.org` → `34.65.14.54` |
+| **tcp:80** open to the internet | ACME challenge | `curl -I http://lab10.ifalabs.org/` from outside |
+| **tcp:443** open | serve HTTPS | already used by the running stack |
+| `DOMAIN` / `LETSENCRYPT_EMAIL` set in `.env` | cert subject + expiry notices | `grep -E 'DOMAIN|LETSENCRYPT_EMAIL' .env` |
+
+> **Rate limits:** Let's Encrypt allows ~5 failed validations/hour and 50 certs/week
+> per domain. **Always run the staging dry-run first** (step 8.2) — it does not count
+> against the production limits.
+
+### 8.2 Issue the certificate
+
+Run from the repo root on the VM (`~/flightdeck`). Set `DOMAIN`/`EMAIL` to match `.env`.
+
+```bash
+DOMAIN=lab10.ifalabs.org
+EMAIL=admin@ifalabs.org
+DC="sudo docker compose -f docker-compose.yml -f docker-compose.tls.yml"
+mkdir -p certbot/conf certbot/www certs
+
+# 1) Free port 80 (brief downtime starts here)
+$DC stop nginx
+
+# 2) Staging dry-run — proves DNS + port 80 work, no rate-limit cost
+sudo docker run --rm -p 80:80 \
+  -v "$PWD/certbot/conf:/etc/letsencrypt" -v "$PWD/certbot/www:/var/www/certbot" \
+  certbot/certbot certonly --standalone --dry-run \
+  -d "$DOMAIN" --email "$EMAIL" --agree-tos --no-eff-email -n
+
+# 3) Only if the dry-run succeeded: request the REAL certificate
+sudo docker run --rm -p 80:80 \
+  -v "$PWD/certbot/conf:/etc/letsencrypt" -v "$PWD/certbot/www:/var/www/certbot" \
+  certbot/certbot certonly --standalone \
+  -d "$DOMAIN" --email "$EMAIL" --agree-tos --no-eff-email -n
+
+# 4) Install the cert where nginx expects it
+sudo cp -L "certbot/conf/live/$DOMAIN/fullchain.pem" certs/fullchain.pem
+sudo cp -L "certbot/conf/live/$DOMAIN/privkey.pem"  certs/privkey.pem
+
+# 5) Bring nginx back (downtime ends)
+$DC up -d nginx
+```
+
+Make sure `COOKIE_SECURE=1` is set in `.env` (it is, when the stack was first
+provisioned in a TLS mode) so session cookies get the `Secure` flag.
+
+### 8.3 Verify
+
+```bash
+# From outside the VM — note: NO -k, so the cert chain is actually validated
+curl -s -w '\nHTTP %{http_code}\n' https://lab10.ifalabs.org/api/v1/health
+# → {"service":"flightdeck-dg-hub","status":"ok"}  HTTP 200
+
+# Inspect issuer / validity on the VM
+sudo openssl x509 -in certs/fullchain.pem -noout -issuer -subject -enddate
+# issuer=... O = Let's Encrypt ...   notAfter=<~90 days out>
+```
+
+A trusted cert means the browser opens `https://lab10.ifalabs.org/` with no warning.
+
+### 8.4 Renewal (important — certs last 90 days)
+
+The certificate above expires after **90 days**. A single cert covers a short
+correction window, but for anything longer set up automatic renewal. The standalone
+method needs port 80, so a renewal either briefly stops nginx or uses the webroot
+that nginx already mounts (`./certbot/www` → `/var/www/certbot`).
+
+Webroot renewal (no downtime) via a weekly cron entry (`sudo crontab -e`):
+
+```bash
+0 3 * * 1 cd /home/student/flightdeck && \
+  docker run --rm -v "$PWD/certbot/conf:/etc/letsencrypt" \
+    -v "$PWD/certbot/www:/var/www/certbot" certbot/certbot renew --webroot -w /var/www/certbot -q && \
+  cp -L certbot/conf/live/lab10.ifalabs.org/fullchain.pem certs/fullchain.pem && \
+  cp -L certbot/conf/live/lab10.ifalabs.org/privkey.pem  certs/privkey.pem && \
+  docker compose -f docker-compose.yml -f docker-compose.tls.yml exec nginx nginx -s reload
+```
+
+(Renewal via webroot also requires the TLS nginx config to serve
+`/.well-known/acme-challenge/` from that webroot.)
 
 ---
 
