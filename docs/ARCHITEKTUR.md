@@ -61,12 +61,14 @@ Tabellen (siehe `app/models.py`):
 - **User** – Benutzerkonto (eindeutiger `username` + `email`, gehashtes
   Passwort, `is_admin`, `privacy_consent`).
 - **Product** – Disc/Produkt mit Disc-Golf-Flugwerten (`speed`, `glide`,
-  `turn`, `fade`) und weiteren Attributen.
+  `turn`, `fade`) und weiteren, vom Crawler befüllten Attributen (`disc_type`,
+  `image_url`, `price`, `weight_range_g`, `stability`, …).
 - **ProductReview** – Bewertung (1–5) + Kommentar; `UniqueConstraint` auf
   (`user_id`, `product_id`): **eine** Bewertung pro Benutzer und Produkt.
 - **SourceRequest** – Benutzer-Anfrage, eine externe Quelle zu scannen;
   Status `open` / `approved` / `rejected`.
-- **ApiToken** – API-Zugangstoken (nur Hash gespeichert), aktiv/deaktivierbar.
+- **ApiToken** – API-Zugangstoken (nur Hash gespeichert), aktiv/deaktivierbar;
+  `is_admin` trennt lesende von schreibenden Tokens.
 
 Beziehungen: `User 1—* ProductReview *—1 Product`,
 `User 1—* SourceRequest`, `User 1—* ApiToken`.
@@ -75,11 +77,17 @@ Beziehungen: `User 1—* ProductReview *—1 Product`,
 
 - **Suche & Filter** der Produkte nach Freitext (`q`) und Kategorie.
 - **Review-Logik**: Upsert pro (User, Produkt) – verhindert Mehrfachbewertungen.
-- **Source-Scanning** (`app/scanner.py`): Nur **freigegebene** Quellen werden
-  gescannt; vorher wird `robots.txt` geprüft (`is_scraping_allowed`). Produkte
-  werden aus `application/ld+json`-`Product`-Markup extrahiert; Duplikate
-  (gleicher Name + Hersteller) werden übersprungen.
-- **REST-API** (`/api/v1/*`): lesender Zugriff mit Token-Authentifizierung.
+- **Web-Crawler** (`app/scanner.py`): Nur **freigegebene** Quellen werden
+  gescannt; vorher wird `robots.txt` geprüft (`is_scraping_allowed`) und ein
+  Crawl-/Politeness-Delay eingehalten. Einzelproduktseiten werden direkt aus
+  `application/ld+json`-`Product`-Markup ausgelesen; Kategorie-/Listenseiten
+  werden über ihre Produktlinks und Paginierung durchsucht (WooCommerce + generische
+  Heuristik), mit Retry und Mengenlimits. Duplikate (Name + Hersteller) werden
+  übersprungen. Gemeinsame Import-Logik liegt in `app/services.py`.
+- **Flugkurven-Diagramm** (`app/flightchart.py`): serverseitiges Inline-SVG aus
+  Turn/Fade (kein JavaScript).
+- **REST-API** (`/api/v1/*`): lesender Zugriff mit Token-Authentifizierung;
+  schreibender Zugriff (Produkte/Quellen/Scan/Reviews) nur mit Admin-Token.
 
 ## 5. Sicherheits- und Betriebsprinzipien (implementiert)
 
@@ -90,7 +98,11 @@ Beziehungen: `User 1—* ProductReview *—1 Product`,
 - **Cookie-Hardening**: `HttpOnly`, `SameSite=Lax`, `Secure` optional über
   `COOKIE_SECURE`.
 - **Zugriffsschutz**: Login-Pflicht für schreibende Aktionen, `admin_required`
-  für Admin-Funktionen, Token-Pflicht für die Daten-Endpunkte des API.
+  für Admin-Funktionen, Token-Pflicht für die Daten-Endpunkte des API,
+  **Admin-Token-Scope** (`is_admin`) für die schreibenden API-Endpunkte (`403`
+  für reine Read-Tokens).
+- **TLS**: vertrauenswürdiges Let's-Encrypt-Zertifikat (certbot, HTTP-01);
+  serverseitig gerendertes SVG wird über `markupsafe` escaped.
 - **Container-Hardening**: `no-new-privileges`, `read_only`-Rootfs für app/nginx,
   dedizierter Non-Root-User im Image.
 - **Datenschutz**: explizite Einwilligung bei der Registrierung, Datenschutzseite.

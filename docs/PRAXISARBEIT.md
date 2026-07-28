@@ -10,7 +10,7 @@
 **Anwendung:** FlightDeck DG Hub – Disc-Golf-Wissensplattform
 **Technologien:** Python 3.12, Flask, MariaDB, Gunicorn, Nginx, Docker Compose
 **Repository:** https://github.com/harpf/FlightDeck-DG-Hub
-**Live-URL:** https://lab10.ifalabs.org _(HTTPS/443; self-signed Zertifikat, siehe Anhang / `docs/DEPLOYMENT.md`)_
+**Live-URL:** https://lab10.ifalabs.org _(HTTPS/443; vertrauenswürdiges **Let's-Encrypt**-Zertifikat, siehe Anhang / `docs/DEPLOYMENT.md`)_
 
 > Dieses Dokument ist als Markdown verfasst und kann mit `pandoc` o. ä. nach PDF
 > konvertiert werden (Mermaid-Diagramme werden z. B. von Typora, VS Code oder
@@ -24,27 +24,36 @@ FlightDeck DG Hub ist eine Webanwendung, mit der eine Disc-Golf-Community
 Ausrüstung (Discs, Bags, Körbe, Zubehör) gemeinsam erfassen, suchen und bewerten
 kann. Benutzer registrieren sich mit Benutzername, E-Mail und Passwort, legen
 Produkte mit den typischen Disc-Golf-Flugwerten (Speed, Glide, Turn, Fade) an
-und bewerten sie. Zusätzlich können Benutzer **Quellen vorschlagen**, aus denen
-ein Administrator nach Freigabe automatisiert Produktdaten importiert
-(Web-Scraping unter Beachtung von `robots.txt`).
+und bewerten sie. Jede Disc erhält aus ihren Flugwerten automatisch ein
+**serverseitig gerendertes Flugkurven-Diagramm** (Inline-SVG). Zusätzlich können
+Benutzer **Quellen vorschlagen**, aus denen ein Administrator nach Freigabe
+Produktdaten automatisiert importiert – ein **eigenentwickelter Web-Crawler**,
+der strukturierte Daten (schema.org-JSON-LD) ausliest, Kategorieseiten bis zu den
+Einzelprodukten folgt (inkl. Paginierung) und dabei `robots.txt` samt
+Crawl-Delay respektiert.
 
 **Plattform / Infrastruktur:** Die Anwendung ist als containerisierte
 3-Schichten-Architektur umgesetzt (Nginx → Gunicorn/Flask → MariaDB) und wird
 per **Docker Compose** betrieben. Das Deployment erfolgt auf einer Linux-VM
-(Google Cloud, `lab10.ifalabs.org`).
+(Google Cloud, `lab10.ifalabs.org`) und ist per **HTTPS mit vertrauenswürdigem
+Let's-Encrypt-Zertifikat** öffentlich erreichbar.
 
 **Grösster Mehrwert:** Eine gemeinschaftlich gepflegte, durchsuchbare
-Wissensbasis inklusive **maschinenlesbarem REST-API**, über das die Produktdaten
-ohne Browser (z. B. per `curl`/Postman) abgerufen werden können.
+Wissensbasis inklusive **maschinenlesbarem REST-API mit lesendem und (über
+Admin-Token) schreibendem Zugriff**, über das die Anwendung ohne Browser
+(z. B. per `curl`/Postman) vollständig gesteuert werden kann.
 
 **Grösstes Risiko:** Die automatisierte Datenübernahme aus Fremdquellen
-(Scraping) ist rechtlich und technisch heikel; sie ist deshalb auf
-**admin-freigegebene** Quellen begrenzt und prüft vorab die `robots.txt`.
+(Crawling) ist rechtlich und technisch heikel; sie ist deshalb auf
+**admin-freigegebene** Quellen begrenzt, prüft vorab die `robots.txt` und
+crawlt bewusst langsam (Politeness-Delay).
 
 **Was das Management wissen sollte:** Die Architektur ist bewusst einfach und
 kostengünstig (ein Host, Open-Source-Stack, keine Lizenzkosten). Sie ist für
 kleine bis mittlere Last ausgelegt; horizontale Skalierung ist vorbereitet,
-aber noch nicht aktiviert (siehe Kapitel 7).
+aber noch nicht aktiviert (siehe Kapitel 7). Offener Punkt für den Betrieb: die
+**automatische Zertifikatserneuerung** ist dokumentiert, aber noch nicht als
+Cronjob aktiviert (Zertifikat 90 Tage gültig).
 
 ---
 
@@ -57,14 +66,15 @@ aber noch nicht aktiviert (siehe Kapitel 7).
 | A1 | Interaktive Weboberfläche (Eingabe, Aktion, Ergebnis) | Produktliste mit Suche/Filter, Produkterfassung, Bewertungen, Source-Anfragen |
 | A2 | Benutzerkonten mit Passwort, Registrierung mit eindeutigem Benutzernamen + E-Mail | `auth`-Blueprint, `User`-Modell mit `unique`-Constraints, Passwort-Hash |
 | A3 | Applikationsspezifische Daten in relationaler DB | `Product`, `ProductReview`, `SourceRequest`, `ApiToken` in MariaDB |
-| A4 | Eigene Geschäftslogik | Suche/Filter, Review-Upsert, Source-Scanning mit robots.txt-Prüfung |
-| A5 | Lesender Zugriff über RESTful Web-API, Auth ohne Browser | `/api/v1/*` mit `X-API-Token`-Header |
+| A4 | Eigene Geschäftslogik | Suche/Filter, Review-Upsert, **Web-Crawler** (JSON-LD, Paginierung, robots.txt/Politeness), Flugkurven-Diagramm (SVG) |
+| A5 | Lesender Zugriff über RESTful Web-API, Auth ohne Browser | `/api/v1/*` mit `X-API-Token`-Header; zusätzlich **schreibender** Zugriff über Admin-Token |
 | A6 | DB MySQL/MariaDB/PostgreSQL | MariaDB 11.4 |
 | A7 | Python ≥ 3.9 | Python 3.12 (Container-Image) |
 | A8 | Flask + Erweiterungen | Flask, Flask-SQLAlchemy, Flask-Login, Flask-WTF, Flask-Migrate |
 | A9 | Gunicorn (ggf. mit Nginx) | Gunicorn hinter Nginx Reverse Proxy |
 | A10 | Source Code auf GitHub | https://github.com/harpf/FlightDeck-DG-Hub |
-| A11 | Tests dokumentiert | pytest-Suite (26 Tests) + Testprotokoll (Kap. 2.6) |
+| A11 | Tests dokumentiert | pytest-Suite (96 Tests) + Testprotokoll (Kap. 2.6) |
+| A12 | Öffentliche Erreichbarkeit über HTTPS | Let's-Encrypt-Zertifikat auf `lab10.ifalabs.org` (Port 443) |
 
 ### 2.2 Funktionalität und Bedienung (User Manual)
 
@@ -86,18 +96,27 @@ aber noch nicht aktiviert (siehe Kapitel 7).
    Kategorie-Filter.
 4. **Produkt anlegen:** *Produkt anlegen* → Felder inkl. Flugwerte (Speed 1–15,
    Glide 1–8, Turn −6…2, Fade 0–6) → Speichern.
-5. **Bewerten:** Produktdetailseite → Bewertung (1–5) + Kommentar. Pro Benutzer
+5. **Produktdetail ansehen:** Detailseite zeigt Produktbild, technische Daten
+   (Disc-Typ, Preis, Gewicht, Stability), die Flugwerte **und ein automatisch aus
+   Turn/Fade erzeugtes Flugkurven-Diagramm** (Inline-SVG, ohne JavaScript).
+6. **Bewerten:** Produktdetailseite → Bewertung (1–5) + Kommentar. Pro Benutzer
    und Produkt ist genau **eine** Bewertung möglich (weitere überschreiben sie).
-6. **Source anfragen:** *Source anfragen* → URL + Notiz. Der Admin sieht die
+7. **Source anfragen:** *Source anfragen* → URL + Notiz. Der Admin sieht die
    Anfrage im Dashboard.
-7. **Admin-Dashboard (`/admin`):** Source-Anfragen freigeben/ablehnen,
-   freigegebene Quelle scannen, API-Tokens erstellen/deaktivieren.
+8. **Admin-Dashboard (`/admin`):** Source-Anfragen freigeben/ablehnen,
+   freigegebene Quelle scannen (Crawler importiert Produkte inkl. Bild, Flugwerte,
+   Preis, Gewicht), API-Tokens erstellen/deaktivieren – wahlweise als **Read-Token**
+   oder **Admin-Token** (Schreibrechte, Checkbox „Admin").
 
 ### 2.3 API-Schnittstelle
 
-Lesendes REST-API für ausgewählte Anwendungsdaten. Authentifizierung über einen
+REST-API für ausgewählte Anwendungsdaten. Authentifizierung über einen
 **statischen API-Token** im Header `X-API-Token: <id>.<secret>` (von einem Admin
-im Dashboard erstellt). Kein Browser/Session nötig.
+im Dashboard erstellt). Kein Browser/Session nötig. **Lesende** Endpunkte
+funktionieren mit jedem aktiven Token; **schreibende** Endpunkte erfordern einen
+als *Admin* markierten Token (sonst `403`).
+
+**Lesend**
 
 | Methode | Endpunkt | Auth | Beschreibung |
 | --- | --- | --- | --- |
@@ -108,17 +127,34 @@ im Dashboard erstellt). Kein Browser/Session nötig.
 | `GET` | `/api/docs` | – | Interaktive Swagger-UI (Browser) |
 | `GET` | `/api/openapi.json` | – | OpenAPI-3.0-Spezifikation (maschinenlesbar) |
 
-Beispiele (bei self-signed Zertifikat `curl -k` verwenden):
+**Schreibend (Admin-Token)**
+
+| Methode | Endpunkt | Beschreibung |
+| --- | --- | --- |
+| `POST` | `/api/v1/products` | Produkt anlegen |
+| `PATCH` | `/api/v1/products/<id>` | Produkt aktualisieren |
+| `DELETE` | `/api/v1/products/<id>` | Produkt löschen |
+| `POST` | `/api/v1/sources` | Source-Request anlegen |
+| `PATCH` | `/api/v1/sources/<id>` | Source-Status ändern (open/approved/rejected) |
+| `POST` | `/api/v1/sources/<id>/scan` | Quelle scannen/importieren → `{found, created, duplicates}` |
+| `POST` | `/api/v1/products/<id>/reviews` | Bewertung anlegen/aktualisieren |
+
+Beispiele (vertrauenswürdiges Zertifikat – kein `-k` nötig):
 
 ```
-curl -k https://lab10.ifalabs.org/api/v1/health
-curl -k -H "X-API-Token: 3.kJ8..." https://lab10.ifalabs.org/api/v1/products
-curl -k -H "X-API-Token: 3.kJ8..." "https://lab10.ifalabs.org/api/v1/products?q=destroyer"
-curl -k -H "X-API-Token: 3.kJ8..." https://lab10.ifalabs.org/api/v1/products/1
+curl https://lab10.ifalabs.org/api/v1/health
+curl -H "X-API-Token: 3.kJ8..." https://lab10.ifalabs.org/api/v1/products
+curl -H "X-API-Token: 3.kJ8..." "https://lab10.ifalabs.org/api/v1/products?q=destroyer"
+
+# Schreibend (Admin-Token):
+curl -X POST https://lab10.ifalabs.org/api/v1/products \
+  -H "X-API-Token: 4.adminSecret..." -H "Content-Type: application/json" \
+  -d '{"name":"Wraith","manufacturer":"Innova","speed":11,"glide":5,"turn":-1,"fade":3}'
 ```
 
-Fehlerfälle: fehlender/ungültiger Token → `401`; unbekanntes Produkt → `404`
-(jeweils als JSON). Details: `scripts/API_Readme.md`.
+Fehlerfälle: fehlender/ungültiger Token → `401`; Read-Token auf Schreib-Endpunkt
+→ `403`; unbekanntes Produkt → `404`; Scan auf nicht-freigegebene Quelle → `409`
+(jeweils als JSON). Details: `scripts/API_Readme.md`, interaktiv unter `/api/docs`.
 
 ### 2.4 Architektur
 
@@ -146,10 +182,18 @@ erDiagram
         string manufacturer
         string category
         text description
+        string product_url
+        string image_url
+        string disc_type
         int speed
         int glide
         int turn
         int fade
+        float diameter_cm
+        string weight_range_g
+        string plastic_type
+        string stability
+        string price
         datetime created_at
     }
     PRODUCT_REVIEW {
@@ -163,6 +207,7 @@ erDiagram
     SOURCE_REQUEST {
         int id PK
         string source_url
+        text note
         string status
         int requested_by_id FK
         datetime created_at
@@ -172,6 +217,7 @@ erDiagram
         string name
         string token_hash
         bool is_active
+        bool is_admin
         int created_by_id FK
         datetime created_at
     }
@@ -181,7 +227,10 @@ Kurzbeschreibung: Ein **User** kann viele **ProductReviews**, **SourceRequests**
 und **ApiTokens** besitzen. Ein **Product** hat viele **ProductReviews**. Die
 Kombination (`user_id`, `product_id`) in `ProductReview` ist über einen
 `UniqueConstraint` eindeutig (eine Bewertung pro Benutzer/Produkt). Passwörter
-und API-Secrets werden ausschliesslich als Hash gespeichert.
+und API-Secrets werden ausschliesslich als Hash gespeichert. `Product` trägt
+neben den Flugwerten die vom Crawler befüllten Felder (`image_url`, `disc_type`,
+`price`, `weight_range_g`, `stability` …). `ApiToken.is_admin` unterscheidet
+lesende von schreibenden Tokens (Autorisierung des Schreib-API).
 
 #### 2.4.2 Wichtigster Ablauf: Source-Anfrage → Scan (Zustandsdiagramm)
 
@@ -190,16 +239,29 @@ stateDiagram-v2
     [*] --> open: User stellt Source-Anfrage
     open --> approved: Admin gibt frei
     open --> rejected: Admin lehnt ab
-    approved --> scanned: Admin startet Scan
-    scanned: robots.txt-Prüfung + Import (Duplikate übersprungen)
+    approved --> fetch: Admin startet Scan
+    fetch: Seite laden (robots.txt-Prüfung, Retry)
+    fetch --> product: enthält Product-JSON-LD
+    fetch --> listing: Kategorie-/Listenseite
+    listing: Produktlinks sammeln (WooCommerce oder generisch)
+    listing --> product: jede Produktseite laden (Politeness-Delay)
+    listing --> listing: nächste Seite (Paginierung)
+    product: Felder extrahieren + Import (Duplikate übersprungen)
     rejected --> [*]
-    scanned --> [*]
+    product --> [*]
 ```
 
-Nur **freigegebene** Quellen dürfen gescannt werden. Vor dem Abruf wird die
-`robots.txt` der Zielseite geprüft (`is_scraping_allowed`). Produkte werden aus
-`application/ld+json`-`Product`-Markup extrahiert; bereits vorhandene Einträge
-(gleicher Name + Hersteller) werden übersprungen.
+Nur **freigegebene** Quellen dürfen gescannt werden. Vor jedem Abruf wird die
+`robots.txt` der Zielseite geprüft (`is_scraping_allowed`) und ein
+Crawl-Delay/Politeness-Delay eingehalten; fehlgeschlagene Requests werden einmal
+wiederholt. Ist die Quelle eine **Einzelproduktseite**, werden die Daten direkt
+aus dem `application/ld+json`-`Product`-Markup gelesen; ist sie eine
+**Kategorie-/Listenseite**, sammelt der Crawler die Produktlinks (primär
+WooCommerce-Kacheln, sonst generische „Produktlink"-Heuristik), folgt der
+**Paginierung** und lädt jede Produktseite einzeln. Extrahiert werden Name,
+Hersteller, Disc-Typ, Beschreibung, Bild, Flugwerte, Preis, Gewicht und
+Stability. Bereits vorhandene Einträge (gleicher Name + Hersteller) werden
+übersprungen. Sicherheitsgrenzen: max. Seiten/Produkte pro Scan.
 
 #### 2.4.3 API-Authentifizierung (Sequenzdiagramm)
 
@@ -224,21 +286,34 @@ sequenceDiagram
     end
 ```
 
+Für **schreibende** Endpunkte gilt zusätzlich: nach erfolgreicher Token-Prüfung
+wird das Flag `is_admin` des Tokens kontrolliert. Ein Read-Token erhält `403`
+(„Admin-scoped API token required"), nur ein Admin-Token darf schreiben. Die
+gemeinsame Scan-/Review-Logik liegt in einer Service-Schicht (`app/services.py`),
+die sowohl von der Weboberfläche als auch vom API genutzt wird – so kann das
+Verhalten nicht auseinanderdriften (DRY).
+
 #### 2.4.4 Bereitstellung (Deployment-Diagramm)
 
 ```mermaid
 flowchart LR
-    client[Browser / API-Client] -->|HTTP 80| nginx
-    subgraph Host["Linux-VM (Docker Compose)"]
-        nginx[nginx Container\nReverse Proxy] -->|app:5000| app[app Container\nGunicorn + Flask]
+    client[Browser / API-Client] -->|HTTPS 443| nginx
+    le[Let's Encrypt] -. Zertifikat .-> nginx
+    subgraph Host["Linux-VM / Google Cloud (Docker Compose)"]
+        nginx[nginx Container\nReverse Proxy + TLS] -->|app:5000| app[app Container\nGunicorn + Flask]
         app -->|db:3306| db[(MariaDB Container)]
         db --- vol[(Volume db_data)]
+        certs[(Volume ./certs)] -. fullchain/privkey .-> nginx
     end
 ```
 
 Drei Container (`nginx`, `app`, `db`) in einem Docker-Compose-Netz. Nur Nginx
-veröffentlicht einen Port nach aussen (80; optional 443 für TLS). Der
-Anwendungszustand liegt ausschliesslich im Volume `db_data`.
+veröffentlicht Ports nach aussen: **443 (HTTPS)** mit einem vertrauenswürdigen
+**Let's-Encrypt-Zertifikat** (`certbot`, HTTP-01-Challenge) sowie 80, das dauerhaft
+auf HTTPS umleitet. Die Zertifikatsdateien liegen im Volume `./certs`. Der
+Anwendungszustand liegt ausschliesslich im Volume `db_data`, sodass App-Container
+ohne Datenverlust ersetzt werden können. Ausstellung/Erneuerung: siehe
+`docs/DEPLOYMENT.md`, Abschnitt 8.
 
 ### 2.5 Zusätzlich verwendete Technologien (mit Quellen)
 
@@ -246,8 +321,22 @@ Anwendungszustand liegt ausschliesslich im Volume `db_data`.
 | --- | --- | --- |
 | Docker / Docker Compose | Containerisierung, reproduzierbares Deployment | https://docs.docker.com/compose/ |
 | Bootstrap 5 | Frontend-Styling (CDN) | https://getbootstrap.com/ |
-| Standardbibliothek `urllib.robotparser` | robots.txt-Prüfung beim Scanning | https://docs.python.org/3/library/urllib.robotparser.html |
+| Standardbibliothek `urllib.robotparser` | robots.txt-Prüfung + Crawl-delay beim Crawling | https://docs.python.org/3/library/urllib.robotparser.html |
 | `application/ld+json` (Schema.org Product) | strukturierte Produktdaten beim Import | https://schema.org/Product |
+| `markupsafe` | sicheres Escaping beim serverseitig gerenderten Flugkurven-SVG | https://markupsafe.palletsprojects.com/ |
+| Let's Encrypt / `certbot` | vertrauenswürdiges TLS-Zertifikat (HTTP-01) | https://certbot.eff.org/ |
+| Inline-SVG (W3C) | Flugkurven-Diagramm ohne JS-Bibliothek | https://developer.mozilla.org/docs/Web/SVG |
+
+**Eigenentwickelte Funktionalität (Kernstück der Arbeit):**
+
+- **Web-Crawler** (`app/scanner.py`): liest schema.org-JSON-LD, folgt
+  WooCommerce-/generischen Listenseiten samt Paginierung zu den Produktseiten,
+  extrahiert Flugwerte/Preis/Gewicht/Stability/Bild, respektiert `robots.txt` +
+  Crawl-delay, mit Politeness-Pause, Retry und Mengenlimits. Trennung von reiner
+  Parselogik (testbar, ohne Netz) und I/O.
+- **Flugkurven-Diagramm** (`app/flightchart.py`): erzeugt aus Turn/Fade
+  serverseitig ein Inline-SVG der typischen Disc-Golf-Flugkurve (kein JavaScript,
+  keine externe Bibliothek).
 
 Begründung Docker (über den Unterricht hinaus): einheitliche Laufzeitumgebung
 für app/db/nginx, einfache Bereitstellung auf der Lab-VM, klare Trennung der
@@ -256,29 +345,30 @@ und Betriebsebene.
 
 ### 2.6 Testprotokoll
 
-Automatisierte Tests: `pytest` (26 Tests, alle grün). Ausführung:
-`pip install -r requirements-dev.txt && pytest`.
+Automatisierte Tests: `pytest` (**96 Tests, alle grün**). Ausführung:
+`pip install -r requirements-dev.txt && pytest`. Untenstehend eine Auswahl von
+12 repräsentativen Testfällen quer über alle Bereiche.
 
 | # | Testfall | Erwartetes Ergebnis | Tatsächliches Ergebnis | Art |
 | - | --- | --- | --- | --- |
-| T1 | Registrierung mit gültigen Daten | User wird angelegt, Redirect zu Login | wie erwartet | auto (`test_register_creates_user`) |
-| T2 | Registrierung mit bereits vergebenem Benutzernamen | kein zweiter Account | wie erwartet | auto (`test_register_rejects_duplicate_username`) |
-| T3 | Registrierung ohne Datenschutz-Einwilligung | Account wird **nicht** angelegt | wie erwartet | auto (`test_register_requires_privacy_consent`) |
-| T4 | Login mit falschem Passwort | Fehlermeldung „Ungültige Zugangsdaten“ | wie erwartet | auto (`test_login_fails_with_wrong_password`) |
-| T5 | Produkt anlegen ohne Login | Redirect zu `/auth/login` | wie erwartet | auto (`test_create_product_requires_login`) |
-| T6 | Startseite zeigt angelegtes Produkt | Produktname sichtbar | wie erwartet | auto (`test_home_lists_products`) |
-| T7 | Suche grenzt Produkte ein | Nicht-Treffer wird nicht angezeigt | wie erwartet | auto (`test_home_search_filters_products`) |
-| T8 | Security-Header gesetzt | `X-Frame-Options`, CSP etc. vorhanden | wie erwartet | auto (`test_security_headers_present`) |
-| T9 | API ohne Token | HTTP 401 | wie erwartet | auto (`test_products_requires_token`) |
-| T10 | API mit gültigem Token | HTTP 200 + Produktliste | wie erwartet | auto (`test_products_list_with_token`) |
-| T11 | API: deaktivierter Token abgelehnt | HTTP 401 | wie erwartet | auto (`test_deactivated_token_is_rejected`) |
-| T12 | API: unbekanntes Produkt | HTTP 404 (JSON) | wie erwartet | auto (`test_product_detail_404`) |
-| T13 | robots.txt verbietet Scan | Quelle wird nicht gescannt | wie erwartet | auto (`test_is_scraping_allowed_respects_parser`) |
-| T14 | End-to-End API gegen Live-Deployment | health 200, ohne Token 401, mit Token 200 | _bei Deployment auszuführen_ | manuell (`scripts/test_api_login.sh`) |
+| T1 | Registrierung mit bereits vergebenem Benutzernamen | kein zweiter Account | wie erwartet | auto (`test_register_rejects_duplicate_username`) |
+| T2 | Registrierung ohne Datenschutz-Einwilligung | Account wird **nicht** angelegt | wie erwartet | auto (`test_register_requires_privacy_consent`) |
+| T3 | Produkt anlegen ohne Login | Redirect zu `/auth/login` | wie erwartet | auto (`test_create_product_requires_login`) |
+| T4 | Suche grenzt Produkte ein | Nicht-Treffer wird nicht angezeigt | wie erwartet | auto (`test_home_search_filters_products`) |
+| T5 | API (lesend) ohne Token | HTTP 401 (JSON) | wie erwartet | auto (`test_products_requires_token`) |
+| T6 | API (lesend) mit gültigem Token | HTTP 200 + Produktliste | wie erwartet | auto (`test_products_list_with_token`) |
+| T7 | Schreib-API mit Read-Token abgelehnt | HTTP 403 | wie erwartet | auto (`test_write_rejected_for_read_only_token`) |
+| T8 | Produkt über API anlegen (Admin-Token) | HTTP 201 + Produkt-JSON | wie erwartet | auto (`test_create_product`) |
+| T9 | Scan einer nicht-freigegebenen Quelle über API | HTTP 409 | wie erwartet | auto (`test_scan_non_approved_source_is_409`) |
+| T10 | Crawler folgt Listen-Paginierung zu Produktseiten | alle Produkte über mehrere Seiten importiert | wie erwartet | auto (`test_scan_crawls_listing_and_follows_pagination`) |
+| T11 | Crawler extrahiert Preis/Gewicht/Stability | Felder korrekt befüllt | wie erwartet | auto (`test_extract_products_populates_price_weight_stability`) |
+| T12 | Flugkurven-SVG escaped Eingaben (XSS-Schutz) | kein `<script>` im Output | wie erwartet | auto (`test_render_flight_svg_escapes_caption_values`) |
+| T13 | End-to-End gegen Live-Deployment (HTTPS) | `curl` ohne `-k`: health 200, ohne Token 401, POST 201 | wie erwartet (am Live-System geprüft) | manuell |
 
 Hinweis gemäss Aufgabenstellung: Es kommt nicht darauf an, dass alle Tests
-erfolgreich sind, sondern dass sie definiert und durchgeführt wurden. T14 ist
-erst nach erfolgtem Deployment auf der Lab-VM ausführbar.
+erfolgreich sind, sondern dass sie definiert und durchgeführt wurden. T13 wurde
+nach dem Deployment gegen `https://lab10.ifalabs.org` mit gültigem
+Let's-Encrypt-Zertifikat ausgeführt.
 
 ---
 
@@ -286,11 +376,15 @@ erst nach erfolgtem Deployment auf der Lab-VM ausführbar.
 
 **Wartbarkeit.** Die App ist in Flask-Blueprints (`main`, `auth`, `products`,
 `admin`, `api`) getrennt; Datenzugriff erfolgt über das SQLAlchemy-ORM statt
-über Roh-SQL. Die JSON-Ausgabe des API ist in zentralen Serializern gebündelt
-(eine Stelle pro Datenform → keine Drift). Automatisierte Tests sichern die
-Kernfunktionen ab. *Vorteil:* schnelle, sichere Änderungen. *Nachteil:* das ORM
-verdeckt teils das tatsächliche SQL; bei Performance-Themen ist `EXPLAIN`-
-Analyse nötig.
+über Roh-SQL. Die JSON-Ausgabe des API ist in zentralen Serializern gebündelt,
+die gemeinsame Scan-/Review-Geschäftslogik in einer **Service-Schicht**
+(`app/services.py`), die Web und API teilen – so gibt es genau eine Umsetzung
+pro Datenform bzw. Ablauf (keine Drift, DRY). Der Crawler trennt reine
+Parselogik von Netz-I/O und ist dadurch ohne Netzwerk testbar. **96
+automatisierte Tests** (inkl. eines geführten Security-Reviews mit anschliessender
+Härtung des Schreib-API) sichern die Kernfunktionen ab. *Vorteil:* schnelle,
+sichere Änderungen. *Nachteil:* das ORM verdeckt teils das tatsächliche SQL; bei
+Performance-Themen ist `EXPLAIN`-Analyse nötig.
 
 **Skalierbarkeit.** Kurzfristig vertikal (mehr Gunicorn-Worker/Threads, mehr
 DB-Ressourcen). Mittelfristig horizontal: Der `app`-Container ist zustandslos
@@ -302,23 +396,28 @@ aktiv (Session-Store, Load-Balancer fehlen).
 **Verfügbarkeit.** Alle Container laufen mit `restart: unless-stopped`; der
 Zustand liegt ausschliesslich im Volume `db_data`, sodass App-Container ohne
 Datenverlust ersetzt werden können. Ein öffentlicher Health-Endpoint
-(`/api/v1/health`) ermöglicht Monitoring. *Nachteil:* Single-Host ohne
-Redundanz; fällt die VM aus, ist der Dienst offline. Für höhere Verfügbarkeit
-wären mehrere Hosts, ein externer DB-Dienst und Healthchecks/Alerting nötig
-(siehe `docs/ARCHITEKTUR.md`, Roadmap).
+(`/api/v1/health`) ermöglicht Monitoring; der Zugriff erfolgt über HTTPS mit
+vertrauenswürdigem Let's-Encrypt-Zertifikat. *Offener Punkt:* Die automatische
+**Zertifikatserneuerung** (90-Tage-Gültigkeit) ist dokumentiert
+(`docs/DEPLOYMENT.md` §8.4), aber noch nicht als Cronjob aktiviert. *Nachteil:*
+Single-Host ohne Redundanz; fällt die VM aus, ist der Dienst offline. Für höhere
+Verfügbarkeit wären mehrere Hosts, ein externer DB-Dienst und
+Healthchecks/Alerting nötig (siehe `docs/ARCHITEKTUR.md`, Roadmap).
 
 ---
 
 ## Anhang
 
-- **Repository:** https://github.com/harpf/FlightDeck-DG-Hub (lesender Zugriff)
-- **Live-URL:** https://lab10.ifalabs.org
-- **Admin-Login:** Benutzer `admin`, Passwort `ChangeMe123!` _(Filler – beim
-  Deployment generiert/gesetzt über `BOOTSTRAP_ADMIN_PASSWORD`, sichere Übergabe
-  an Examinator)_
-- **API-Token (Beispiel):** `3.kJ8s2_FILLER_secret_xyz` _(im Admin-Dashboard
-  erzeugen, siehe Kap. 2.3)_
+- **Repository:** https://github.com/harpf/FlightDeck-DG-Hub (öffentlich, lesend)
+- **Live-URL:** https://lab10.ifalabs.org (HTTPS/443, vertrauenswürdiges
+  Let's-Encrypt-Zertifikat – kein `-k` nötig)
+- **Admin-Login:** Benutzer `admin`, Passwort `<beim Deployment generiert>`
+  _(gesetzt über `BOOTSTRAP_ADMIN_PASSWORD` in der `.env`; sichere Übergabe an
+  den Examinator, nicht im Repository)_
+- **API-Token (Beispiel):** `<id>.<secret>` _(im Admin-Dashboard erzeugen –
+  Read-Token für lesend, „Admin"-Checkbox für schreibend, siehe Kap. 2.3)_
+- **Interaktive API-Doku:** https://lab10.ifalabs.org/api/docs (Swagger-UI)
 - **Architektur-Detail:** `docs/ARCHITEKTUR.md`
-- **Deployment:** `docs/DEPLOYMENT.md`
+- **Deployment inkl. TLS/Let's Encrypt:** `docs/DEPLOYMENT.md`
 - **API-Doku:** `scripts/API_Readme.md`
 
