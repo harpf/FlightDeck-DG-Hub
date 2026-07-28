@@ -236,3 +236,133 @@ def test_extract_products_handles_image_as_plain_string():
     )
     products = extract_products_from_html(html, "https://shop.example/pr/x/")
     assert products[0].image_url == "https://shop.example/x.jpg"
+
+
+# --- Crawler improvements: extra fields, generic links, politeness ---------
+
+from app.scanner import (  # noqa: E402
+    parse_price,
+    parse_stability,
+    parse_weight_grams,
+)
+
+
+def test_parse_price_from_aggregate_offer():
+    entry = {"offers": {"@type": "AggregateOffer", "lowPrice": "22.90", "priceCurrency": "EUR"}}
+    assert parse_price(entry) == "22.90 EUR"
+
+
+def test_parse_price_from_offer_list():
+    entry = {"offers": [{"@type": "Offer", "price": "19.90", "priceCurrency": "CHF"}]}
+    assert parse_price(entry) == "19.90 CHF"
+
+
+def test_parse_weight_kgm_to_grams():
+    entry = {"weight": {"@type": "QuantitativeValue", "unitCode": "KGM", "value": "0.200"}}
+    assert parse_weight_grams(entry) == "200 g"
+
+
+def test_parse_stability_keywords():
+    assert parse_stability("eine überstabile Distance Driver Disc") == "überstabil"
+    assert parse_stability("understable Putter") == "understabil"
+    assert parse_stability("stabiler Midrange") == "stabil"
+    assert parse_stability("keine Angabe") is None
+
+
+def test_extract_products_populates_price_weight_stability():
+    html = """
+    <meta name="description" content="Die Axiom Defy ist eine überstabile Distance Driver Disc - Speed: 11 - Glide: 5 - Turn: -1 - Fade: 3.">
+    <script type="application/ld+json">
+    {"@type":"Product","name":"Axiom Defy | Distance Driver | shop",
+     "brand":{"@type":"Brand","name":"Axiom"},
+     "weight":{"@type":"QuantitativeValue","unitCode":"KGM","value":"0.175"},
+     "offers":{"@type":"AggregateOffer","lowPrice":"22.90","priceCurrency":"EUR"},
+     "url":"/pr/axiom-defy/"}
+    </script>
+    """
+    p = extract_products_from_html(html, "https://shop.example/pr/axiom-defy/")[0]
+    assert p.price == "22.90 EUR"
+    assert p.weight_range_g == "175 g"
+    assert p.stability == "überstabil"
+
+
+def test_extract_product_links_generic_fallback_non_woocommerce():
+    html = """
+    <a href="/shop/disc-a/" class="product-tile__link">A</a>
+    <a href="/shop/disc-b/" class="card product link-primary">B</a>
+    <a href="/kategorie/discs/" class="product-category-link">Kategorie</a>
+    """
+    links = extract_product_links(html, "https://shop.example/discs/")
+    assert links == [
+        "https://shop.example/shop/disc-a/",
+        "https://shop.example/shop/disc-b/",
+    ]
+
+
+def test_woocommerce_links_take_precedence_over_generic():
+    # A page with WooCommerce tiles must NOT also pull in unrelated product-ish links.
+    html = """
+    <a href="/pr/real/" class="woocommerce-LoopProduct-link">real</a>
+    <a href="/misc/" class="some-product-link">noise</a>
+    """
+    links = extract_product_links(html, "https://shop.example/kat/")
+    assert links == ["https://shop.example/pr/real/"]
+
+
+def test_scan_sleeps_between_product_fetches():
+    pages = {
+        "https://shop.example/kat/": '<a class="woocommerce-LoopProduct-link" href="/pr/a/">A</a>',
+        "https://shop.example/pr/a/": _product_page("Axiom A | Midrange | shop"),
+    }
+    calls = []
+    scan_products_from_url(
+        "https://shop.example/kat/",
+        fetch=lambda url, timeout=10: pages[url],
+        can_fetch=lambda url: True,
+        sleep=lambda seconds: calls.append(seconds),
+        delay=0.2,
+    )
+    assert calls, "expected the crawler to pause between requests"
+
+
+def test_disc_type_falls_back_to_title_when_category_is_generic():
+    # JSON-LD category is only "Discs" -> use the middle title segment "Putter".
+    html = (
+        '<script type="application/ld+json">'
+        '{"@type":"Product","name":"Axiom Bokeh | Putter | discgolf4you","category":"Discs"}'
+        "</script>"
+    )
+    p = extract_products_from_html(html, "https://shop.example/pr/bokeh/")[0]
+    assert p.name == "Axiom Bokeh"
+    assert p.disc_type == "Putter"
+
+
+def test_disc_type_prefers_specific_category():
+    html = (
+        '<script type="application/ld+json">'
+        '{"@type":"Product","name":"Axiom Defy | Distance Driver | shop","category":"Discs &gt; Distance Driver"}'
+        "</script>"
+    )
+    p = extract_products_from_html(html, "https://shop.example/pr/defy/")[0]
+    assert p.disc_type == "Distance Driver"
+
+
+def test_scan_retries_a_failing_product_fetch_once():
+    attempts = {"count": 0}
+
+    def fetch(url, timeout=10):
+        if url == "https://shop.example/kat/":
+            return '<a class="woocommerce-LoopProduct-link" href="/pr/a/">A</a>'
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise OSError("temporary")
+        return _product_page("Axiom A | Midrange | shop")
+
+    products = scan_products_from_url(
+        "https://shop.example/kat/",
+        fetch=fetch,
+        can_fetch=lambda url: True,
+        sleep=lambda seconds: None,
+    )
+    assert [p.name for p in products] == ["Axiom A"]
+    assert attempts["count"] == 2  # failed once, retried, succeeded

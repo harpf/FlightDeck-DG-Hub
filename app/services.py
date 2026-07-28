@@ -53,6 +53,9 @@ def import_products_from_source(source_request: SourceRequest, *, scan=None, rob
             glide=item.glide,
             turn=item.turn,
             fade=item.fade,
+            price=item.price,
+            weight_range_g=item.weight_range_g,
+            stability=item.stability,
         ))
         created += 1
     db.session.commit()

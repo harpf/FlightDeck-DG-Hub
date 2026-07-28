@@ -62,6 +62,7 @@
       <h2 class="h6 mb-3">Technische Daten</h2>
       <dl class="spec-list row mb-0">
         <dt class="col-6">Disc-Typ</dt><dd class="col-6">{{ product.disc_type or '–' }}</dd>
+        <dt class="col-6">Preis</dt><dd class="col-6">{{ product.price or '–' }}</dd>
         <dt class="col-6">Plastic</dt><dd class="col-6">{{ product.plastic_type or '–' }}</dd>
         <dt class="col-6">Stability</dt><dd class="col-6">{{ product.stability or '–' }}</dd>
         <dt class="col-6">Durchmesser</dt><dd class="col-6">{{ (product.diameter_cm|string + ' cm') if product.diameter_cm else '–' }}</dd>

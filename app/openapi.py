@@ -41,9 +41,10 @@ def build_openapi_spec() -> dict:
             "disc_type": {"type": "string", "nullable": True, "example": "Distance Driver"},
             "flight_numbers": flight_numbers_schema,
             "diameter_cm": {"type": "number", "nullable": True, "example": 21.1},
-            "weight_range_g": {"type": "string", "nullable": True, "example": "165-175 g"},
+            "weight_range_g": {"type": "string", "nullable": True, "example": "175 g"},
             "plastic_type": {"type": "string", "nullable": True, "example": "Star"},
-            "stability": {"type": "string", "nullable": True, "example": "overstable"},
+            "stability": {"type": "string", "nullable": True, "example": "überstabil"},
+            "price": {"type": "string", "nullable": True, "example": "22.90 EUR"},
             "created_at": {"type": "string", "format": "date-time"},
             "reviews": {"type": "array", "items": review_schema},
         },
@@ -71,6 +72,7 @@ def build_openapi_spec() -> dict:
             "weight_range_g": {"type": "string", "nullable": True},
             "plastic_type": {"type": "string", "nullable": True},
             "stability": {"type": "string", "nullable": True},
+            "price": {"type": "string", "nullable": True, "example": "22.90 EUR"},
         },
     }
     source_input_schema = {

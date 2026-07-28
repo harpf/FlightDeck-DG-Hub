@@ -314,6 +314,7 @@ def _serialize_product(product: Product, include_reviews: bool = True) -> dict:
         "weight_range_g": product.weight_range_g,
         "plastic_type": product.plastic_type,
         "stability": product.stability,
+        "price": product.price,
         "created_at": product.created_at.isoformat(),
     }
     if include_reviews:
@@ -395,7 +396,7 @@ def api_full_dump():
 _PRODUCT_WRITABLE_FIELDS = (
     "manufacturer", "description", "product_url", "image_url", "disc_type",
     "speed", "glide", "turn", "fade", "diameter_cm", "weight_range_g",
-    "plastic_type", "stability",
+    "plastic_type", "stability", "price",
 )
 _PRODUCT_INT_FIELDS = ("speed", "glide", "turn", "fade")
 _PRODUCT_FLOAT_FIELDS = ("diameter_cm",)

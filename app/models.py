@@ -51,6 +51,7 @@ class Product(db.Model):
     weight_range_g = db.Column(db.String(32))
     plastic_type = db.Column(db.String(120))
     stability = db.Column(db.String(120))
+    price = db.Column(db.String(32))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
     reviews = db.relationship("ProductReview", back_populates="product", lazy=True, cascade="all, delete-orphan")
