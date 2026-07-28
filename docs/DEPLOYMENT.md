@@ -228,19 +228,26 @@ correction window, but for anything longer set up automatic renewal. The standal
 method needs port 80, so a renewal either briefly stops nginx or uses the webroot
 that nginx already mounts (`./certbot/www` → `/var/www/certbot`).
 
-Webroot renewal (no downtime) via a weekly cron entry (`sudo crontab -e`):
+The TLS nginx config already serves `/.well-known/acme-challenge/` from
+`/var/www/certbot`, so renewal uses the **webroot** challenge with nginx running
+(no downtime). The repo ships `scripts/renew-cert.sh`, which renews, installs the
+cert into `./certs`, and reloads nginx.
+
+Test it first (staging, no rate-limit cost):
 
 ```bash
-0 3 * * 1 cd /home/student/flightdeck && \
-  docker run --rm -v "$PWD/certbot/conf:/etc/letsencrypt" \
-    -v "$PWD/certbot/www:/var/www/certbot" certbot/certbot renew --webroot -w /var/www/certbot -q && \
-  cp -L certbot/conf/live/lab10.ifalabs.org/fullchain.pem certs/fullchain.pem && \
-  cp -L certbot/conf/live/lab10.ifalabs.org/privkey.pem  certs/privkey.pem && \
-  docker compose -f docker-compose.yml -f docker-compose.tls.yml exec nginx nginx -s reload
+sudo bash scripts/renew-cert.sh --dry-run
 ```
 
-(Renewal via webroot also requires the TLS nginx config to serve
-`/.well-known/acme-challenge/` from that webroot.)
+Then install a weekly root cron job:
+
+```bash
+# as root (sudo crontab -e), one line:
+0 3 * * 1 /bin/bash /home/student/flightdeck/scripts/renew-cert.sh >> /var/log/flightdeck-renew.log 2>&1
+```
+
+`certbot renew` is a no-op until the cert is within ~30 days of expiry, so running
+weekly is safe.
 
 ---
 
