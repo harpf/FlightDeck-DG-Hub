@@ -1,9 +1,17 @@
-# Lösungsdokument als PDF bauen (inkl. Mermaid-Diagramme)
+# Lösungsdokument als PDF bauen (inkl. Mermaid, Layout, Seitenzahlen)
 
-Erzeugt aus `docs/PRAXISARBEIT.md` ein druckfertiges PDF. Die Mermaid-Diagramme
-werden clientseitig zu SVG gerendert; ein headless Chromium/Edge druckt die
-Seite nach PDF. Benötigt nur **Python** und einen **Chromium-basierten Browser**
-(Edge oder Chrome) – kein pandoc/LaTeX.
+Erzeugt aus `docs/PRAXISARBEIT.md` ein Leitfaden-nahes PDF: Arial 11 pt (Tabellen
+10 pt), A4-Ränder 3/2/2.5/2.5 cm, Blocksatz, automatisches Inhaltsverzeichnis,
+gerenderte Mermaid-Diagramme und **Seitenzahlen** (unten rechts). Benötigt
+**Python**, **Node.js** und einen installierten **Edge/Chrome** (kein
+pandoc/LaTeX, keine gebündelte Chromium-Instanz).
+
+## Einmalig: Node-Abhängigkeit
+
+```bash
+# lädt kein Chromium herunter – nutzt das installierte Edge/Chrome
+PUPPETEER_SKIP_DOWNLOAD=1 npm install --no-save puppeteer-core
+```
 
 ## 1. Markdown → self-contained HTML
 
@@ -11,33 +19,24 @@ Seite nach PDF. Benötigt nur **Python** und einen **Chromium-basierten Browser*
 python scripts/md2html.py docs/PRAXISARBEIT.md build/PRAXISARBEIT.html
 ```
 
-## 2. HTML → PDF (headless Edge/Chrome)
-
-Windows (Edge), aus dem Repo-Root:
-
-```powershell
-$edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-$abs  = (Resolve-Path build).Path -replace '\\','/'
-& $edge --headless=new --disable-gpu --no-pdf-header-footer `
-  --run-all-compositor-stages-before-draw --virtual-time-budget=20000 `
-  --print-to-pdf="$abs/PRAXISARBEIT.pdf" "file:///$abs/PRAXISARBEIT.html"
-```
-
-Linux/macOS (Chrome/Chromium – Pfad ggf. anpassen):
+## 2. HTML → PDF (mit Seitenzahlen)
 
 ```bash
-chrome --headless=new --disable-gpu --no-pdf-header-footer \
-  --run-all-compositor-stages-before-draw --virtual-time-budget=20000 \
-  --print-to-pdf="$PWD/build/PRAXISARBEIT.pdf" "file://$PWD/build/PRAXISARBEIT.html"
+node scripts/print-pdf.mjs build/PRAXISARBEIT.html build/PRAXISARBEIT.pdf
+# optional expliziter Browser-Pfad als 3. Argument:
+# node scripts/print-pdf.mjs build/PRAXISARBEIT.html build/PRAXISARBEIT.pdf "C:/Program Files/Google/Chrome/Application/chrome.exe"
 ```
 
-`--virtual-time-budget` gibt Mermaid Zeit zum Rendern; `--no-pdf-header-footer`
-entfernt die Standard-Kopf-/Fusszeilen des Browsers.
+Das Skript wartet auf das Mermaid-Rendering (`body[data-ready="1"]`), setzt die
+Ränder gemäss Leitfaden und druckt die Seitenzahl über die Fusszeilen-Vorlage.
 
-## 3. Alternative ohne Kommandozeile
+## Hinweise / Feinschliff
 
-`build/PRAXISARBEIT.html` einfach im Browser öffnen und **Drucken → Als PDF
-speichern** (A4). Das Print-CSS (A4-Ränder, Seitenumbrüche) ist bereits im HTML.
-
-> `build/` ist in `.gitignore` – das PDF wird also nicht eingecheckt, sondern
-> jeweils frisch erzeugt und auf Complesis hochgeladen.
+- **Titelblatt-Seitenzahl:** Die Zählung beginnt aktuell auf Seite 1 (Titelblatt).
+  Der Leitfaden empfiehlt, erst ab der Seite *nach* dem Titelblatt zu nummerieren –
+  ein optionaler Feinschliff (z. B. finaler Durchgang in Word).
+- **Ohne Kommandozeile:** `build/PRAXISARBEIT.html` im Browser öffnen und
+  **Drucken → Als PDF speichern** (A4). Layout/Seitenumbrüche stecken im HTML;
+  Seitenzahlen kommen dann aus dem Druckdialog.
+- `build/` und `node_modules/` sind in `.gitignore` – das PDF wird frisch erzeugt
+  und auf Campus hochgeladen, nicht eingecheckt.

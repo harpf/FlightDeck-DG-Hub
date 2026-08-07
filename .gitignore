@@ -19,6 +19,10 @@ build/
 dist/
 .Python
 
+# Node (only used locally for the PDF build helper)
+node_modules/
+package-lock.json
+
 # Virtual environments
 venv/
 .venv/
