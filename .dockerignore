@@ -1,0 +1,11 @@
+.git
+.github
+.devswarm-temp
+certbot
+certs
+docs
+Aufgabe
+tests
+.env
+*.pyc
+__pycache__
