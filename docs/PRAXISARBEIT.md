@@ -345,6 +345,8 @@ Verhalten nicht auseinanderdriften (DRY).
 
 ```mermaid
 flowchart LR
+    dev[Push nach main] --> gha[GitHub Actions\nTests + Deploy-Pipeline]
+    gha -. SSH: pull, build, migrate .-> Host
     client[Browser / API-Client] -->|HTTPS 443| nginx
     le[Let's Encrypt] -. Zertifikat .-> nginx
     subgraph Host["Linux-VM / Google Cloud (Docker Compose)"]
@@ -365,6 +367,22 @@ Anwendungszustand liegt ausschliesslich im Volume `db_data`, sodass App-Containe
 ohne Datenverlust ersetzt werden können. Ausstellung/Erneuerung: siehe
 `docs/DEPLOYMENT.md`, Abschnitt 8.
 
+**CI/CD-Pipeline (GitHub Actions):** Ein Workflow (`.github/workflows/deploy.yml`)
+automatisiert die bisher manuellen Deployment-Schritte. Job 1 (`test`) installiert
+die Abhängigkeiten und führt die pytest-Suite aus; nur bei grünem Ergebnis läuft
+Job 2 (`deploy`). Dieser baut per SSH-Agent-Action eine Verbindung mit einem
+dedizierten, ausschliesslich für die Pipeline erzeugten Ed25519-Schlüssel auf
+(hinterlegt als GitHub-Secret, kein Passwort im Klartext) und führt auf der VM
+`git pull`, `docker compose up -d --build app`, `flask db upgrade` sowie einen
+Health-Check gegen `/api/v1/health` aus. Dafür wurde `Flask-Migrate`/Alembic
+nachträglich auf dem bestehenden Schema initialisiert (leere Baseline-Revision,
+per `flask db stamp head` als aktuell markiert), sodass künftige
+Schemaänderungen über `flask db migrate`/`upgrade` statt manueller
+`ALTER TABLE`-Anweisungen laufen. Aktuell ist der Workflow bewusst nur manuell
+auslösbar (`workflow_dispatch`); der automatische Trigger bei Push auf `main`
+ist im Workflow bereits vorbereitet, aber auskommentiert, bis die Pipeline sich
+im Praxisbetrieb bewährt hat. Details: `docs/DEPLOYMENT.md`, Abschnitt 10.
+
 ### 2.5 Zusätzlich verwendete Technologien (mit Quellen)
 
 | Technologie | Zweck | Quelle |
@@ -376,6 +394,8 @@ ohne Datenverlust ersetzt werden können. Ausstellung/Erneuerung: siehe
 | `markupsafe` | sicheres Escaping beim serverseitig gerenderten Flugkurven-SVG | https://markupsafe.palletsprojects.com/ |
 | Let's Encrypt / `certbot` | vertrauenswürdiges TLS-Zertifikat (HTTP-01) | https://certbot.eff.org/ |
 | Inline-SVG (W3C) | Flugkurven-Diagramm ohne JS-Bibliothek | https://developer.mozilla.org/docs/Web/SVG |
+| GitHub Actions | CI/CD-Pipeline: Tests + automatisiertes Deployment | https://docs.github.com/actions |
+| Flask-Migrate / Alembic | Versionierte Schemamigrationen statt manueller `ALTER TABLE` | https://flask-migrate.readthedocs.io/ |
 
 *Tabelle 3: Zusätzlich verwendete Technologien. Eigene Darstellung.*
 
@@ -519,6 +539,10 @@ Docker Inc. (o. J.). *Docker Compose documentation*. Abgerufen am 19. Juni 2026 
 
 Electronic Frontier Foundation (o. J.). *Certbot*. Abgerufen am 19. Juni 2026 von https://certbot.eff.org/
 
+GitHub, Inc. (o. J.). *GitHub Actions Documentation*. Abgerufen am 14. August 2026 von https://docs.github.com/actions
+
+Grinberg, M. (o. J.). *Flask-Migrate Documentation*. Abgerufen am 14. August 2026 von https://flask-migrate.readthedocs.io/
+
 Let's Encrypt (o. J.). *How It Works*. Abgerufen am 19. Juni 2026 von https://letsencrypt.org/how-it-works/
 
 MDN Web Docs (o. J.). *SVG: Scalable Vector Graphics*. Abgerufen am 19. Juni 2026 von https://developer.mozilla.org/docs/Web/SVG
@@ -544,6 +568,8 @@ Zauner, J. (2026). *FlightDeck DG Hub* [Quellcode-Repository]. GitHub. Abgerufen
 - **API-Token (Beispiel):** `‹id›.‹secret›` _(im Admin-Dashboard erzeugen –
   Read-Token für lesend, „Admin"-Checkbox für schreibend, siehe Kapitel 2.3)_
 - **Interaktive API-Doku:** https://lab10.ifalabs.org/api/docs (Swagger-UI)
+- **CI/CD-Pipeline:** GitHub Actions, Tab „Actions" im Repository, Workflow
+  „Deploy to lab10" (aktuell manuell auslösbar über „Run workflow")
 - **Weitere Projektdokumente:** `docs/ARCHITEKTUR.md`, `docs/DEPLOYMENT.md`,
   `scripts/API_Readme.md`
 
@@ -581,6 +607,7 @@ _‹Vor der Abgabe prüfen und wahrheitsgemäss vervollständigen.›_
 | --- | --- | --- |
 | Claude (Anthropic) | Unterstützung bei Programmierung und automatisierten Tests | Programmcode (`app/`, `tests/`) |
 | Claude (Anthropic) | Unterstützung bei Deployment, TLS und Betriebsskripten | Kapitel 2.4.4, `scripts/`, `docs/DEPLOYMENT.md` |
+| Claude (Anthropic) | Einrichtung der CI/CD-Pipeline (GitHub Actions) inkl. SSH-Deploy-Key und Retrofit von Flask-Migrate/Alembic | Kapitel 2.4.4, `.github/workflows/deploy.yml`, `migrations/` |
 | Claude (Anthropic) | Struktur- und Formulierungsentwürfe der Dokumentation | Kapitel 2 (Struktur/Entwürfe) |
 | Claude (Anthropic) | Rechtschreib- und Grammatikprüfung | Gesamtes Dokument |
 

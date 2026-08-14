@@ -106,6 +106,24 @@ Beziehungen: `User 1—* ProductReview *—1 Product`,
 - **Container-Hardening**: `no-new-privileges`, `read_only`-Rootfs für app/nginx,
   dedizierter Non-Root-User im Image.
 - **Datenschutz**: explizite Einwilligung bei der Registrierung, Datenschutzseite.
+- **CI/CD**: GitHub-Actions-Pipeline (`.github/workflows/deploy.yml`) führt vor
+  jedem Deployment die Testsuite aus und deployt nur bei grünem Ergebnis über
+  einen dedizierten, passwortlosen SSH-Deploy-Key (als GitHub-Secret hinterlegt).
+
+### 5.1 CI/CD-Pipeline
+
+Der Workflow hat zwei Jobs: `test` (Checkout, `pip install`, `pytest`) und
+`deploy` (nur bei Erfolg von `test`). Der Deploy-Job baut per
+`webfactory/ssh-agent` eine SSH-Verbindung mit einem eigens für die Pipeline
+erzeugten Ed25519-Schlüssel auf und führt auf der VM `git pull`,
+`docker compose up -d --build app`, `flask db upgrade` und einen Health-Check
+gegen `/api/v1/health` aus. Für den `flask db upgrade`-Schritt wurde
+Flask-Migrate/Alembic nachträglich auf dem produktiven Schema initialisiert
+(leere Baseline-Revision, per `flask db stamp head` als Ist-Zustand markiert),
+sodass Schemaänderungen ab jetzt versioniert statt per manueller
+`ALTER TABLE`-Anweisung erfolgen. Der Workflow ist aktuell nur manuell
+auslösbar (`workflow_dispatch`); der Trigger für automatisches Deployment bei
+Push auf `main` liegt vorbereitet, aber auskommentiert im Workflow.
 
 ## 6. Request Flow
 
@@ -120,7 +138,8 @@ Beziehungen: `User 1—* ProductReview *—1 Product`,
 
 **Wartbarkeit**
 - Klare Blueprint-Trennung, ORM statt Roh-SQL, zentrale Serializer für das API.
-- Automatisierte Tests (`tests/`, pytest) und Schemamigrationen (Flask-Migrate).
+- Automatisierte Tests (`tests/`, pytest) und versionierte Schemamigrationen
+  (Flask-Migrate/Alembic), beide in die CI/CD-Pipeline eingebunden (siehe 5.1).
 
 **Skalierbarkeit**
 - Vertikal: Gunicorn-Worker/Threads erhöhen, DB-Ressourcen anheben.

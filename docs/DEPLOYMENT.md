@@ -23,9 +23,9 @@ that can reach the lab — i.e. SSH **into** the VM and run the commands there
 ssh student@lab10.ifalabs.org
 ```
 
-A deploy SSH key was generated locally during setup
-(`~/.ssh/flightdeck_deploy.pub`). Optionally append it to
-`~/.ssh/authorized_keys` on the VM for password-less access.
+For manual/interactive access, add your own key to
+`~/.ssh/authorized_keys` on the VM. The CI/CD pipeline (see section 10) uses
+its own dedicated deploy key, unrelated to your personal access.
 
 ---
 
@@ -268,3 +268,55 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T db \
 
 Data persists in the `db_data` Docker volume, so app containers can be rebuilt
 without data loss.
+
+---
+
+## 10. CI/CD pipeline (GitHub Actions)
+
+`.github/workflows/deploy.yml` automates the steps above. Two jobs:
+
+1. **`test`** — checkout, install `requirements.txt` + `requirements-dev.txt`,
+   run `python -m pytest`.
+2. **`deploy`** (only runs if `test` passes) — sets up an SSH agent with a
+   dedicated deploy key (`webfactory/ssh-agent`), then over SSH:
+   `git pull --ff-only origin main` → `docker compose -f docker-compose.yml
+   -f docker-compose.tls.yml up -d --build app` → `flask db upgrade` →
+   `curl -kf https://localhost/api/v1/health`.
+
+**Trigger:** currently `workflow_dispatch` only (manual — "Run workflow" in
+the Actions tab). A `push: branches: [main]` trigger is present in the file
+but commented out; uncomment it once the pipeline has proven itself to deploy
+automatically on every merge to `main`.
+
+**Secrets** (repo → Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+| --- | --- |
+| `SSH_PRIVATE_KEY` | Private half of a dedicated Ed25519 key, generated solely for this pipeline (not a personal key) |
+| `SSH_HOST` | `lab10.ifalabs.org` |
+| `SSH_USER` | `student` |
+
+The matching public key was appended once to `~/.ssh/authorized_keys` on the
+VM. Rotate by generating a new pair, appending the new public key on the VM,
+updating `SSH_PRIVATE_KEY`, then removing the old public key line.
+
+**Schema migrations:** `flask db upgrade` requires Flask-Migrate/Alembic to be
+initialized. This was done once, retroactively, against the already-running
+production schema:
+
+```bash
+# one-off container, bind-mounting the repo so files land on the host,
+# --user root avoids a bind-mount permission mismatch (fix ownership after)
+docker compose -f docker-compose.yml -f docker-compose.tls.yml \
+  run --rm --user root -v "$PWD":/app app sh -c \
+  "flask db init && flask db revision -m 'baseline: matches existing schema' && chown -R student:student /app/migrations"
+
+# mark the existing schema as already at that (empty) revision
+docker compose -f docker-compose.yml -f docker-compose.tls.yml \
+  run --rm -v "$PWD":/app app flask db stamp head
+```
+
+This only needs to run once per environment. From here on, real schema
+changes go through the normal Flask-Migrate flow (`flask db migrate -m "..."`
+then commit the generated file under `migrations/versions/`) instead of
+manual `ALTER TABLE` statements.
