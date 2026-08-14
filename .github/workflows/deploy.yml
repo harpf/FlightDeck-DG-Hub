@@ -1,0 +1,49 @@
+name: Deploy to lab10
+
+on:
+  # Currently manual-only. Once we're confident in the pipeline, uncomment
+  # the push trigger below to deploy automatically on every merge to main.
+  # push:
+  #   branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Trust host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy over SSH
+        run: |
+          ssh "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" '
+            set -e
+            cd ~/flightdeck
+            git pull --ff-only
+            docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build app
+            docker compose -f docker-compose.yml -f docker-compose.tls.yml exec -T app flask db upgrade
+            curl -kf https://localhost/api/v1/health
+          '
