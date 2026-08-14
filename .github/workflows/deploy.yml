@@ -42,7 +42,7 @@ jobs:
           ssh "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" '
             set -e
             cd ~/flightdeck
-            git pull --ff-only
+            git pull --ff-only origin main
             docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build app
             docker compose -f docker-compose.yml -f docker-compose.tls.yml exec -T app flask db upgrade
             curl -kf https://localhost/api/v1/health
