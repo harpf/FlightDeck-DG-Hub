@@ -350,6 +350,16 @@ enter an address you can check. Check delivery attempts on the VM:
 docker compose -f docker-compose.yml -f docker-compose.tls.yml logs postfix --tail=50
 ```
 
+**`MAIL_DEFAULT_SENDER` must use a domain listed in `ALLOWED_SENDER_DOMAINS`
+(i.e. `DOMAIN`)**, e.g. `no-reply@lab10.ifalabs.org` — set it in `.env`
+(see `.env.example`). If it doesn't match, Postfix silently accepts the SMTP
+session from the app but rejects the RCPT with `554 5.7.1 ... Access
+denied` (visible in the postfix log above, not in the app's own error). The
+app's own error log only shows a generic `SMTPRecipientsRefused`, so when
+troubleshooting a failed send, check `postfix` logs first, not just `app`.
+Confirmed working end-to-end on 2026-08-15: a real send via this path was
+accepted by an external mailbox's live mail server (`status=sent`).
+
 ## 12. Known gotcha: nginx caches the app container's IP
 
 `proxy_pass http://app:5000` (a static hostname) resolves once when nginx

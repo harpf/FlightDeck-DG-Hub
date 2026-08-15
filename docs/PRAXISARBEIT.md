@@ -401,7 +401,9 @@ da kein Zugriff auf die DNS-Zone besteht; Mails können dadurch im
 Spam-Ordner landen. `Flask-Mail` sendet, `itsdangerous` erzeugt die zeitlich
 begrenzten, signierten Bestätigungs-/Reset-Tokens. Ein Fehlschlag beim Senden
 (z. B. Postfix nicht erreichbar) wird abgefangen und geloggt statt die
-anfragende Aktion mit 500 abzubrechen.
+anfragende Aktion mit 500 abzubrechen. Der Versand wurde end-to-end gegen
+eine echte externe Mailbox verifiziert: Postfix lieferte direkt an deren
+Mailserver aus, dieser bestätigte mit `250 Ok` (angenommen zur Zustellung).
 
 Beim Einbau von Postfix zeigte sich ein latenter Bug im bestehenden
 nginx-Setup: `proxy_pass http://app:5000` löst den Hostnamen einmalig beim
