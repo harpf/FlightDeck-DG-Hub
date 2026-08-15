@@ -17,6 +17,26 @@ class RegisterForm(FlaskForm):
     submit = SubmitField("Registrieren")
 
 
+class ResetPasswordRequestForm(FlaskForm):
+    email = StringField("E-Mail", validators=[DataRequired(), Email(), Length(max=255)])
+    submit = SubmitField("Link anfordern")
+
+
+class ResetPasswordForm(FlaskForm):
+    password = PasswordField("Neues Passwort", validators=[DataRequired(), Length(min=10, max=120)])
+    submit = SubmitField("Passwort setzen")
+
+
+class ResendConfirmationForm(FlaskForm):
+    email = StringField("E-Mail", validators=[DataRequired(), Email(), Length(max=255)])
+    submit = SubmitField("Bestätigungsmail erneut senden")
+
+
+class TestMailForm(FlaskForm):
+    recipient = StringField("Empfänger", validators=[DataRequired(), Email(), Length(max=255)])
+    submit = SubmitField("Testmail senden")
+
+
 class ProductForm(FlaskForm):
     name = StringField("Produktname", validators=[DataRequired(), Length(max=255)])
     manufacturer = StringField("Hersteller", validators=[Optional(), Length(max=255)])

@@ -14,7 +14,9 @@
     </div>
   </div>
   <p class="text-center text-muted mt-3 small">
-    Noch kein Konto? <a href="{{ url_for('auth.register') }}">Jetzt registrieren</a>
+    Noch kein Konto? <a href="{{ url_for('auth.register') }}">Jetzt registrieren</a><br>
+    <a href="{{ url_for('auth.reset_password_request') }}">Passwort vergessen?</a> ·
+    <a href="{{ url_for('auth.resend_confirmation') }}">Bestätigungsmail erneut senden</a>
   </p>
 </div>
 {% endblock %}

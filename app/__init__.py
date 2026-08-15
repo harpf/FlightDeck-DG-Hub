@@ -4,7 +4,7 @@ from flask import Flask, redirect, render_template, url_for
 from flask_login import current_user, logout_user
 
 from config import Config
-from app.extensions import db, login_manager, migrate
+from app.extensions import db, login_manager, mail, migrate
 from app.models import User
 from app.routes import admin_bp, api_bp, auth_bp, main_bp, products_bp
 
@@ -15,6 +15,7 @@ def create_app(config_class=Config):
 
     db.init_app(app)
     migrate.init_app(app, db)
+    mail.init_app(app)
     login_manager.init_app(app)
 
     app.register_blueprint(main_bp)
@@ -100,7 +101,7 @@ def register_cli_commands(app: Flask) -> None:
             print("Admin existiert bereits.")
             return
 
-        user = User(username="admin", email="admin@flightdeck.local", is_admin=True, privacy_consent=True)
+        user = User(username="admin", email="admin@flightdeck.local", is_admin=True, privacy_consent=True, email_confirmed=True)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()

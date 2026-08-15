@@ -6,7 +6,12 @@ from flask_login import current_user, login_required, login_user, logout_user
 
 from app.extensions import db
 from app.flightchart import render_flight_svg
-from app.forms import ApiTokenForm, LoginForm, ProductForm, ProductReviewForm, RegisterForm, SourceRequestForm, SourceRequestStatusForm
+from app.forms import (
+    ApiTokenForm, LoginForm, ProductForm, ProductReviewForm, RegisterForm,
+    ResendConfirmationForm, ResetPasswordForm, ResetPasswordRequestForm,
+    SourceRequestForm, SourceRequestStatusForm, TestMailForm,
+)
+from app.emailing import send_confirmation_email, send_password_reset_email, send_test_email, verify_confirm_token, verify_reset_token
 from app.models import ApiToken, Product, ProductReview, SourceRequest, User
 from app.openapi import build_openapi_spec
 from app.scanner import is_scraping_allowed, scan_products_from_url
@@ -114,9 +119,41 @@ def register():
         user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()
-        flash("Account erstellt. Bitte anmelden.", "success")
+        if send_confirmation_email(user):
+            flash("Account erstellt. Bitte bestätige deine E-Mail-Adresse (Link wurde zugeschickt).", "success")
+        else:
+            flash("Account erstellt, aber die Bestätigungsmail konnte nicht versendet werden. Bitte später erneut anfordern.", "warning")
         return redirect(url_for("auth.login"))
     return render_template("auth/register.html", form=form)
+
+
+@auth_bp.route("/confirm/<token>")
+def confirm_email(token):
+    email = verify_confirm_token(token)
+    if email is None:
+        flash("Der Bestätigungslink ist ungültig oder abgelaufen.", "danger")
+        return redirect(url_for("auth.resend_confirmation"))
+    user = User.query.filter_by(email=email).first()
+    if user is None:
+        flash("Der Bestätigungslink ist ungültig oder abgelaufen.", "danger")
+        return redirect(url_for("auth.resend_confirmation"))
+    if not user.email_confirmed:
+        user.email_confirmed = True
+        db.session.commit()
+    flash("E-Mail-Adresse bestätigt. Du kannst dich jetzt anmelden.", "success")
+    return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/resend-confirmation", methods=["GET", "POST"])
+def resend_confirmation():
+    form = ResendConfirmationForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user and not user.email_confirmed:
+            send_confirmation_email(user)
+        flash("Falls diese Adresse registriert und noch nicht bestätigt ist, wurde eine Mail verschickt.", "info")
+        return redirect(url_for("auth.login"))
+    return render_template("auth/resend_confirmation.html", form=form)
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
@@ -130,6 +167,9 @@ def login():
             if not user.is_active:
                 flash("Dieses Konto wurde deaktiviert. Bitte wende dich an den Administrator.", "danger")
                 return render_template("auth/login.html", form=form)
+            if not user.email_confirmed:
+                flash("Bitte bestätige zuerst deine E-Mail-Adresse.", "warning")
+                return render_template("auth/login.html", form=form)
             login_user(user)
             return redirect(url_for("main.home"))
         flash("Ungültige Zugangsdaten.", "danger")
@@ -141,6 +181,41 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for("main.home"))
+
+
+@auth_bp.route("/reset-password", methods=["GET", "POST"])
+def reset_password_request():
+    if current_user.is_authenticated:
+        return redirect(url_for("main.home"))
+    form = ResetPasswordRequestForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user:
+            send_password_reset_email(user)
+        flash("Falls diese Adresse registriert ist, wurde ein Link zum Zurücksetzen verschickt.", "info")
+        return redirect(url_for("auth.login"))
+    return render_template("auth/reset_request.html", form=form)
+
+
+@auth_bp.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    if current_user.is_authenticated:
+        return redirect(url_for("main.home"))
+    email = verify_reset_token(token)
+    if email is None:
+        flash("Der Link zum Zurücksetzen ist ungültig oder abgelaufen.", "danger")
+        return redirect(url_for("auth.reset_password_request"))
+    user = User.query.filter_by(email=email).first()
+    if user is None:
+        flash("Der Link zum Zurücksetzen ist ungültig oder abgelaufen.", "danger")
+        return redirect(url_for("auth.reset_password_request"))
+    form = ResetPasswordForm()
+    if form.validate_on_submit():
+        user.set_password(form.password.data)
+        db.session.commit()
+        flash("Passwort wurde geändert. Bitte anmelden.", "success")
+        return redirect(url_for("auth.login"))
+    return render_template("auth/reset_password.html", form=form)
 
 
 @products_bp.route("/new", methods=["GET", "POST"])
@@ -192,7 +267,23 @@ def dashboard():
     source_requests = SourceRequest.query.order_by(SourceRequest.created_at.desc()).all()
     tokens = ApiToken.query.order_by(ApiToken.created_at.desc()).all()
     users = User.query.order_by(User.created_at.desc()).all()
-    return render_template("admin/dashboard.html", source_requests=source_requests, tokens=tokens, users=users, token_form=ApiTokenForm(), status_form=SourceRequestStatusForm())
+    return render_template(
+        "admin/dashboard.html", source_requests=source_requests, tokens=tokens, users=users,
+        token_form=ApiTokenForm(), status_form=SourceRequestStatusForm(),
+        test_mail_form=TestMailForm(recipient=current_user.email),
+    )
+
+
+@admin_bp.route("/mail/test", methods=["POST"])
+@admin_required
+def send_test_mail():
+    form = TestMailForm()
+    if form.validate_on_submit():
+        if send_test_email(form.recipient.data):
+            flash(f"Testmail an {form.recipient.data} verschickt.", "success")
+        else:
+            flash("Testmail konnte nicht versendet werden (siehe Server-Log).", "danger")
+    return redirect(url_for("admin.dashboard"))
 
 
 @admin_bp.route("/users/<int:user_id>/toggle-active", methods=["POST"])

@@ -12,6 +12,16 @@ class Config:
 
     BOOTSTRAP_ADMIN_PASSWORD = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
 
+    # Mail (Postfix container on the internal Docker network, direct-send, no auth/TLS needed)
+    MAIL_SERVER = os.getenv("MAIL_SERVER", "postfix")
+    MAIL_PORT = int(os.getenv("MAIL_PORT", "25"))
+    MAIL_USE_TLS = False
+    MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", "no-reply@flightdeck.local")
+
+    # Token lifetimes (seconds) for e-mail confirmation / password reset links
+    CONFIRM_TOKEN_MAX_AGE = 60 * 60 * 24  # 24h
+    RESET_TOKEN_MAX_AGE = 60 * 60  # 1h
+
 
 class TestingConfig(Config):
     """Config for the automated test suite.
@@ -25,3 +35,4 @@ class TestingConfig(Config):
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     WTF_CSRF_ENABLED = False
     SECRET_KEY = "test-secret"
+    MAIL_SUPPRESS_SEND = True

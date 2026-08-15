@@ -34,8 +34,8 @@ def db(app):
 
 @pytest.fixture()
 def user(db):
-    """A normal registered user."""
-    u = User(username="tester", email="tester@example.com", privacy_consent=True)
+    """A normal, already-confirmed registered user."""
+    u = User(username="tester", email="tester@example.com", privacy_consent=True, email_confirmed=True)
     u.set_password("password123")
     db.session.add(u)
     db.session.commit()
@@ -44,7 +44,7 @@ def user(db):
 
 @pytest.fixture()
 def admin(db):
-    a = User(username="admin", email="admin@example.com", is_admin=True, privacy_consent=True)
+    a = User(username="admin", email="admin@example.com", is_admin=True, privacy_consent=True, email_confirmed=True)
     a.set_password("adminpass123")
     db.session.add(a)
     db.session.commit()
