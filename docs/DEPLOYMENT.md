@@ -280,7 +280,8 @@ without data loss.
 2. **`deploy`** (only runs if `test` passes) — sets up an SSH agent with a
    dedicated deploy key (`webfactory/ssh-agent`), then over SSH:
    `git pull --ff-only origin main` → `docker compose -f docker-compose.yml
-   -f docker-compose.tls.yml up -d --build app` → `flask db upgrade` →
+   -f docker-compose.tls.yml up -d --build` (all services, so new ones like
+   `postfix` get started too) → `flask db upgrade` →
    `curl -kf https://localhost/api/v1/health`.
 
 **Trigger:** currently `workflow_dispatch` only (manual — "Run workflow" in
@@ -320,3 +321,57 @@ This only needs to run once per environment. From here on, real schema
 changes go through the normal Flask-Migrate flow (`flask db migrate -m "..."`
 then commit the generated file under `migrations/versions/`) instead of
 manual `ALTER TABLE` statements.
+
+---
+
+## 11. Mail (Postfix)
+
+A `postfix` container (`boky/postfix`) handles outbound mail: e-mail
+confirmation after registration, password reset, and the admin "send test
+mail" button. Config lives entirely in `docker-compose.yml`:
+
+```yaml
+ALLOWED_SENDER_DOMAINS: ${DOMAIN}
+POSTFIX_myhostname: ${DOMAIN}
+```
+
+It's reachable only from other containers on the internal Docker network
+(`app` → `postfix:25`) — no published port, otherwise it would be an open
+relay. It sends directly (no smarthost/relay auth needed), which requires
+outbound tcp:25 to be open — GCP often blocks this by default, but it was
+confirmed open on lab10. There's no SPF/DKIM for the domain (no DNS zone
+access), so mail can land in recipients' spam folders; acceptable for the
+exam/correction window, not for real production use.
+
+Verify it's working: log in as admin → dashboard → "Testmail senden" card →
+enter an address you can check. Check delivery attempts on the VM:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.tls.yml logs postfix --tail=50
+```
+
+## 12. Known gotcha: nginx caches the app container's IP
+
+`proxy_pass http://app:5000` (a static hostname) resolves once when nginx
+starts and caches that IP for the life of the worker process. The `app`
+container gets a **new** Docker-internal IP every time it's recreated
+(every deploy that rebuilds the image) — but nginx itself is never
+restarted by the deploy pipeline, so a long enough uptime eventually means
+nginx is pointing at a dead IP → `502 Bad Gateway`, while `docker compose
+ps` shows everything "healthy".
+
+Fixed in all three `nginx/templates/*.template` files with:
+
+```nginx
+resolver 127.0.0.11 valid=10s;   # Docker's embedded DNS
+location / {
+    set $upstream_app app:5000;   # forces per-request re-resolution
+    proxy_pass http://$upstream_app;
+    ...
+}
+```
+
+If this ever resurfaces (e.g. after editing the nginx templates and
+dropping the `resolver`/`set` lines by accident): `docker compose -f
+docker-compose.yml -f docker-compose.tls.yml restart nginx` immediately
+fixes it by forcing a fresh DNS lookup.

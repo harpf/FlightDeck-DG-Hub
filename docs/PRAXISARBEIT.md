@@ -124,14 +124,19 @@ GitHub veröffentlicht (siehe Quellenverzeichnis), die Anwendung läuft unter
 - **User (registriert):** zusätzlich Produkte anlegen, Produkte bewerten,
   Source-Anfragen senden.
 - **Admin:** zusätzlich Source-Anfragen moderieren (freigeben/ablehnen), Quellen
-  scannen, API-Tokens verwalten sowie **alle registrierten Benutzer einsehen und
-  deaktivieren/aktivieren**.
+  scannen, API-Tokens verwalten, **alle registrierten Benutzer einsehen und
+  deaktivieren/aktivieren** sowie eine **Testmail versenden** (Kontrolle des
+  Mailversands, unabhängig von Registrierung/Passwort-Reset).
 
 **Typische Abläufe**
 
 1. **Registrieren:** Navbar → *Registrieren* → Benutzername, E-Mail, Passwort
-   (min. 10 Zeichen), Datenschutz-Einwilligung → Absenden.
-2. **Anmelden:** Navbar → *Login*.
+   (min. 10 Zeichen), Datenschutz-Einwilligung → Absenden. Der Account ist erst
+   nach Klick auf den Bestätigungslink in der zugeschickten E-Mail
+   login-fähig; „Bestätigungsmail erneut senden" auf der Login-Seite deckt den
+   Fall ab, dass die Mail nicht ankam.
+2. **Anmelden:** Navbar → *Login*. „Passwort vergessen?" führt über eine
+   zeitlich begrenzte, signierte Mail-Link zum Setzen eines neuen Passworts.
 3. **Produkte suchen/filtern:** Startseite – Freitextsuche (Name/Hersteller) und
    Kategorie-Filter.
 4. **Produkt anlegen:** *Produkt anlegen* → Felder inkl. Flugwerte (Speed 1–15,
@@ -352,6 +357,8 @@ flowchart LR
     subgraph Host["Linux-VM / Google Cloud (Docker Compose)"]
         nginx[nginx Container\nReverse Proxy + TLS] -->|app:5000| app[app Container\nGunicorn + Flask]
         app -->|db:3306| db[(MariaDB Container)]
+        app -->|postfix:25| postfix[postfix Container\nMail-Relay]
+        postfix -.->|Direktversand| internet((Internet))
         db --- vol[(Volume db_data)]
         certs[(Volume ./certs)] -. fullchain/privkey .-> nginx
     end
@@ -373,7 +380,7 @@ die Abhängigkeiten und führt die pytest-Suite aus; nur bei grünem Ergebnis l�
 Job 2 (`deploy`). Dieser baut per SSH-Agent-Action eine Verbindung mit einem
 dedizierten, ausschliesslich für die Pipeline erzeugten Ed25519-Schlüssel auf
 (hinterlegt als GitHub-Secret, kein Passwort im Klartext) und führt auf der VM
-`git pull`, `docker compose up -d --build app`, `flask db upgrade` sowie einen
+`git pull`, `docker compose up -d --build`, `flask db upgrade` sowie einen
 Health-Check gegen `/api/v1/health` aus. Dafür wurde `Flask-Migrate`/Alembic
 nachträglich auf dem bestehenden Schema initialisiert (leere Baseline-Revision,
 per `flask db stamp head` als aktuell markiert), sodass künftige
@@ -382,6 +389,29 @@ Schemaänderungen über `flask db migrate`/`upgrade` statt manueller
 auslösbar (`workflow_dispatch`); der automatische Trigger bei Push auf `main`
 ist im Workflow bereits vorbereitet, aber auskommentiert, bis die Pipeline sich
 im Praxisbetrieb bewährt hat. Details: `docs/DEPLOYMENT.md`, Abschnitt 10.
+
+**Mailversand (Postfix):** Ein vierter Container (`postfix`, Image
+`boky/postfix`) übernimmt den Versand transaktionaler Mails
+(E-Mail-Bestätigung nach Registrierung, Passwort-Reset, Admin-Testmail). Er
+ist ausschliesslich im internen Docker-Netz erreichbar (`app` → `postfix:25`,
+kein veröffentlichter Port, sonst offener Relay) und versendet direkt
+(HTTP/SMTP-Port 25 ausgehend auf der GCP-VM offen, geprüft) ohne
+Relay/Smarthost — für die Praxisarbeit/Korrekturphase bewusst ohne SPF/DKIM,
+da kein Zugriff auf die DNS-Zone besteht; Mails können dadurch im
+Spam-Ordner landen. `Flask-Mail` sendet, `itsdangerous` erzeugt die zeitlich
+begrenzten, signierten Bestätigungs-/Reset-Tokens. Ein Fehlschlag beim Senden
+(z. B. Postfix nicht erreichbar) wird abgefangen und geloggt statt die
+anfragende Aktion mit 500 abzubrechen.
+
+Beim Einbau von Postfix zeigte sich ein latenter Bug im bestehenden
+nginx-Setup: `proxy_pass http://app:5000` löst den Hostnamen einmalig beim
+Start auf und cached die IP; wird der `app`-Container neu erstellt (jeder
+Deploy), ändert sich seine Docker-interne IP, während das seit Wochen
+laufende nginx die alte IP weiterverwendet → `502 Bad Gateway`. Bisher blieb
+das unbemerkt, weil Docker die freigewordene IP meist zufällig wiederverwendet
+hat; der zusätzliche `postfix`-Container verschob die IP-Vergabe und deckte es
+auf. Behoben mit dem Standardmuster `resolver 127.0.0.11 valid=10s;` plus
+Variable in `proxy_pass`, damit nginx pro Request neu auflöst.
 
 ### 2.5 Zusätzlich verwendete Technologien (mit Quellen)
 
@@ -396,6 +426,9 @@ im Praxisbetrieb bewährt hat. Details: `docs/DEPLOYMENT.md`, Abschnitt 10.
 | Inline-SVG (W3C) | Flugkurven-Diagramm ohne JS-Bibliothek | https://developer.mozilla.org/docs/Web/SVG |
 | GitHub Actions | CI/CD-Pipeline: Tests + automatisiertes Deployment | https://docs.github.com/actions |
 | Flask-Migrate / Alembic | Versionierte Schemamigrationen statt manueller `ALTER TABLE` | https://flask-migrate.readthedocs.io/ |
+| Postfix (`boky/postfix`-Image) | Mailversand (Bestätigung, Passwort-Reset, Testmail) | https://www.postfix.org/ |
+| Flask-Mail | SMTP-Anbindung der Flask-App an Postfix | https://flask-mail.readthedocs.io/ |
+| itsdangerous | Signierte, zeitlich begrenzte Bestätigungs-/Reset-Tokens | https://itsdangerous.palletsprojects.com/ |
 
 *Tabelle 3: Zusätzlich verwendete Technologien. Eigene Darstellung.*
 
@@ -541,9 +574,15 @@ Electronic Frontier Foundation (o. J.). *Certbot*. Abgerufen am 19. Juni 2026 vo
 
 GitHub, Inc. (o. J.). *GitHub Actions Documentation*. Abgerufen am 14. August 2026 von https://docs.github.com/actions
 
+Grinberg, M. (o. J.). *Flask-Mail Documentation*. Abgerufen am 15. August 2026 von https://flask-mail.readthedocs.io/
+
 Grinberg, M. (o. J.). *Flask-Migrate Documentation*. Abgerufen am 14. August 2026 von https://flask-migrate.readthedocs.io/
 
 Let's Encrypt (o. J.). *How It Works*. Abgerufen am 19. Juni 2026 von https://letsencrypt.org/how-it-works/
+
+Pallets (o. J.). *ItsDangerous Documentation*. Abgerufen am 15. August 2026 von https://itsdangerous.palletsprojects.com/
+
+Postfix (o. J.). *Postfix Documentation*. Abgerufen am 15. August 2026 von https://www.postfix.org/
 
 MDN Web Docs (o. J.). *SVG: Scalable Vector Graphics*. Abgerufen am 19. Juni 2026 von https://developer.mozilla.org/docs/Web/SVG
 
@@ -570,6 +609,8 @@ Zauner, J. (2026). *FlightDeck DG Hub* [Quellcode-Repository]. GitHub. Abgerufen
 - **Interaktive API-Doku:** https://lab10.ifalabs.org/api/docs (Swagger-UI)
 - **CI/CD-Pipeline:** GitHub Actions, Tab „Actions" im Repository, Workflow
   „Deploy to lab10" (aktuell manuell auslösbar über „Run workflow")
+- **Mailversand-Test:** Admin-Dashboard → Karte „Testmail senden" (prüft den
+  Postfix-Pfad unabhängig von Registrierung/Passwort-Reset)
 - **Weitere Projektdokumente:** `docs/ARCHITEKTUR.md`, `docs/DEPLOYMENT.md`,
   `scripts/API_Readme.md`
 
@@ -608,6 +649,7 @@ _‹Vor der Abgabe prüfen und wahrheitsgemäss vervollständigen.›_
 | Claude (Anthropic) | Unterstützung bei Programmierung und automatisierten Tests | Programmcode (`app/`, `tests/`) |
 | Claude (Anthropic) | Unterstützung bei Deployment, TLS und Betriebsskripten | Kapitel 2.4.4, `scripts/`, `docs/DEPLOYMENT.md` |
 | Claude (Anthropic) | Einrichtung der CI/CD-Pipeline (GitHub Actions) inkl. SSH-Deploy-Key und Retrofit von Flask-Migrate/Alembic | Kapitel 2.4.4, `.github/workflows/deploy.yml`, `migrations/` |
+| Claude (Anthropic) | Mailversand-Feature (Postfix-Container, E-Mail-Bestätigung, Passwort-Reset, Admin-Testmail) inkl. Fund und Fix eines nginx-Upstream-Bugs | Kapitel 2.4.4, `app/emailing.py`, `app/routes.py`, `docker-compose.yml`, `nginx/templates/` |
 | Claude (Anthropic) | Struktur- und Formulierungsentwürfe der Dokumentation | Kapitel 2 (Struktur/Entwürfe) |
 | Claude (Anthropic) | Rechtschreib- und Grammatikprüfung | Gesamtes Dokument |
 

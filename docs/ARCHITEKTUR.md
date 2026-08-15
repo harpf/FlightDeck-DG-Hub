@@ -35,6 +35,11 @@ Browser / API-Client
 - TLS-Terminierung (HTTPS), HTTP→HTTPS-Redirect, Reverse Proxy auf `app:5000`.
 - Konfiguration als Template (`nginx/templates/flightdeck.conf.template`), das
   beim Start per `envsubst` mit Domain/Zertifikatsnamen befüllt wird.
+- `resolver 127.0.0.11 valid=10s;` + Variable in `proxy_pass` statt eines
+  statischen Hostnamens: nginx löst `app` sonst nur einmal beim Start auf und
+  cached die IP — der `app`-Container bekommt bei jedem Deploy (Recreate)
+  eine neue Docker-interne IP, ein lang laufendes nginx würde sonst auf eine
+  tote IP zeigen (`502 Bad Gateway`).
 - Begründung: bewährte, performante Standardlösung für TLS; Caching/Compression
   später leicht ergänzbar.
 
@@ -45,6 +50,8 @@ Browser / API-Client
 - **Flask-Login** für Session-Authentifizierung.
 - **Flask-WTF** für Formularvalidierung und CSRF-Schutz.
 - **SQLAlchemy ORM** + **Flask-Migrate** für Datenzugriff und Schemamigrationen.
+- **Flask-Mail** + **itsdangerous** für Mailversand (E-Mail-Bestätigung,
+  Passwort-Reset) mit signierten, zeitlich begrenzten Tokens.
 - Betrieb über **Gunicorn** (`2 workers`, `4 threads`, siehe `Dockerfile`).
 - Begründung: schnelle Entwicklung, große Community, gute Erweiterbarkeit.
 
@@ -53,6 +60,18 @@ Browser / API-Client
 - Persistenz über Docker-Volume `db_data`.
 - Begründung: robust für transaktionale CRUD-Workloads, gut mit SQLAlchemy
   kombinierbar.
+
+### 2.5 Postfix (`postfix`-Container)
+- Mail-Relay für transaktionale Mails (Image `boky/postfix`), von `app` über
+  `postfix:25` angesprochen.
+- Kein veröffentlichter Port — nur im internen Docker-Netz erreichbar, sonst
+  wäre der Container ein offener Relay.
+- Direktversand (keine Auth/TLS zu einem Smarthost nötig); bewusst ohne
+  SPF/DKIM, da für die Praxisarbeits-Korrekturphase kein Zugriff auf die
+  DNS-Zone besteht (Mails können im Spam-Ordner landen).
+- Begründung: eigener Mailserver statt externem Dienst, da im Unterricht
+  keine Anbindung an einen kommerziellen Mailversender vorgesehen war und die
+  Anforderung „Postfix“ explizit gestellt wurde.
 
 ## 3. Datenmodell
 
