@@ -9,15 +9,22 @@
 
 ## PDF erzeugen
 
-Das Lösungsdokument enthält Mermaid-Diagramme. Möglichkeiten zur PDF-Erzeugung:
+Das Lösungsdokument enthält Mermaid-Diagramme und ist auf das ipso!-Leitfaden-
+Layout ausgelegt (Arial 11 pt, A4-Ränder, Inhaltsverzeichnis, Seitenzahlen).
+Empfohlener Weg über die mitgelieferten Skripte (siehe
+[`../scripts/build-praxisarbeit-pdf.md`](../scripts/build-praxisarbeit-pdf.md)):
 
-- **VS Code:** Erweiterung „Markdown Preview Mermaid Support“ + „Markdown PDF“.
-- **Typora:** öffnet `.md` mit gerenderten Mermaid-Diagrammen, Export → PDF.
-- **pandoc** (mit Diagramm-Filter):
-  ```bash
-  npm install -g @mermaid-js/mermaid-cli mermaid-filter
-  pandoc docs/PRAXISARBEIT.md -o Praxisarbeit.pdf -F mermaid-filter
-  ```
+```bash
+# einmalig: PUPPETEER_SKIP_DOWNLOAD=1 npm install --no-save puppeteer-core
+python scripts/md2html.py docs/PRAXISARBEIT.md build/PRAXISARBEIT.html
+node   scripts/print-pdf.mjs build/PRAXISARBEIT.html build/PRAXISARBEIT.pdf
+```
 
-Vor der Abgabe: `<GitHub-URL eintragen>`, Live-URL und Admin-Zugangsdaten im
-Dokument ergänzen.
+Ohne Kommandozeile: `build/PRAXISARBEIT.html` im Browser öffnen und **Drucken →
+Als PDF speichern** (A4).
+
+Vor der Abgabe im Dokument ergänzen: Titelblatt-Platzhalter (Adresse, E-Mail,
+Klasse, Abgabedatum, Examinator/in), Management Summary und Reflexion in eigenen
+Worten, KI-Deklaration prüfen und die **Eigenständigkeitserklärung unterschreiben**.
+GitHub-URL: https://github.com/harpf/FlightDeck-DG-Hub · Live-URL:
+https://lab10.ifalabs.org
