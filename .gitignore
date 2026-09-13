@@ -1,7 +1,6 @@
-# DevSwarm / Claude / AI tooling
+# Local tooling & editor files
 .devswarm-temp/
 .claude/
-CLAUDE.local.md
 
 # IDE / editor
 .vscode/
